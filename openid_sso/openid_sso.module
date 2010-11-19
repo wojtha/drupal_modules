@@ -137,7 +137,7 @@ function openid_sso_request() {
   $provider = variable_get('openid_sso_provider', array());
   $values = array(
     'openid_identifier' => $provider['url'],
-    'openid.return_to' => url('openid/authenticate', array('absolute' => TRUE, 'query' => 'destination=')),
+    'openid.return_to' => url('openid/authenticate', array('absolute' => TRUE, 'query' => 'destination=node')),
   );
   openid_begin($values['openid_identifier'], $values['openid.return_to'], $values);
 }
