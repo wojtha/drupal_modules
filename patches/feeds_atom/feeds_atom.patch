@@ -1,0 +1,246 @@
+? feeds_atom.patch
+Index: feeds_atom.module
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/feeds_atom.module,v
+retrieving revision 1.1
+diff -u -p -r1.1 feeds_atom.module
+--- feeds_atom.module	21 Sep 2010 21:58:38 -0000	1.1
++++ feeds_atom.module	19 Nov 2010 16:06:37 -0000
+@@ -22,6 +22,17 @@ function feeds_atom_feeds_plugins() {
+       'path' => $path
+     )
+   );
++  
++  $info['FeedsAtomRDFCustomParser'] = array(
++    'name' => 'FeedsAtomRDF Custom parser',
++    'description' => 'Parses data in Atom RDF format and allows you to define your own mapping.',
++    'handler' => array(
++      'parent' => 'FeedsParser',
++      'class' => 'FeedsAtomRDFCustomParser',
++      'file' => 'FeedsAtomRDFCustomParser.inc',
++      'path' => $path
++    )
++  );
+ 
+   $info['FeedsAtomRDFProcessor'] = array(
+     'name' => 'FeedsAtomRDF Processing Stage',
+Index: libraries/atomrdf_parser.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/libraries/atomrdf_parser.inc,v
+retrieving revision 1.1
+diff -u -p -r1.1 atomrdf_parser.inc
+--- libraries/atomrdf_parser.inc	21 Sep 2010 22:08:31 -0000	1.1
++++ libraries/atomrdf_parser.inc	19 Nov 2010 16:06:37 -0000
+@@ -217,14 +217,32 @@ function atomrdf_parse($feed_XML,$feed_r
+     $author_found = FALSE;
+     if (!empty($news->source->author->name)) {
+       $original_author = "{$news->source->author->name}";
++      if (!empty($news->source->author->email)) {
++        $original_author_email = "{$news->source->author->email}";
++      }
++      if (!empty($news->source->author->url)) {
++        $original_author_url = "{$news->source->author->url}";
++      }
+       $author_found = TRUE;
+     }
+     else if (!empty($news->author->name)) {
+       $original_author = "{$news->author->name}";
++      if (!empty($news->author->email)) {
++        $original_author_email = "{$news->author->email}";
++      }
++      if (!empty($news->author->url)) {
++        $original_author_url = "{$news->author->url}";
++      }
+       $author_found = TRUE;
+     }
+     if (!empty($feed_XML->author->name) && !$author_found) {
+       $original_author = "{$feed_XML->author->name}";
++      if (!empty($feed_XML->author->email)) {
++        $original_author_email = "{$feed_XML->author->email}";
++      }
++      if (!empty($feed_XML->author->url)) {
++        $original_author_url = "{$feed_XML->author->url}";
++      }
+     }
+ 
+     // some src elements in some valid atom feeds contained no urls at all
+@@ -245,6 +263,8 @@ function atomrdf_parse($feed_XML,$feed_r
+     $item['title'] = _parser_common_syndication_title($title, $body);
+     $item['description'] = $body;
+     $item['author_name'] = $original_author;
++    $item['author_email'] = $original_author_email;
++    $item['author_url'] = $original_author_url;
+     $item['timestamp'] = _parser_common_syndication_parse_date(isset($news->published) ? "{$news->published}" : "{$news->issued}");
+     $item['tags'] = isset($additional_taxonomies['ATOM Categories']) ? $additional_taxonomies['ATOM Categories'] : array();
+     $item['domains'] = isset($additional_taxonomies['ATOM Domains']) ? $additional_taxonomies['ATOM Domains'] : array();
+Index: plugins/FeedsAtomRDFCustomParser.inc
+===================================================================
+RCS file: plugins/FeedsAtomRDFCustomParser.inc
+diff -N plugins/FeedsAtomRDFCustomParser.inc
+--- /dev/null	1 Jan 1970 00:00:00 -0000
++++ plugins/FeedsAtomRDFCustomParser.inc	19 Nov 2010 16:06:37 -0000
+@@ -0,0 +1,68 @@
++<?php
++
++/**
++ * Parses Atom RDF feeds and allows you to define your own mapping for feeds
++ */
++class FeedsAtomRDFCustomParser extends FeedsParser {
++
++  /**
++   * Implementation of FeedsParser::parse().
++   */
++  public function parse(FeedsImportBatch $batch, FeedsSource $source) {
++    require_once './' . drupal_get_path('module','feeds_atom') . '/libraries/atomrdf_parser.inc';
++    $result = atomrdf_parser_parse($batch->getRaw());
++    $batch->setTitle($result['title']);
++    $batch->setDescription($result['description']);
++    $batch->setLink($result['link']);
++    if (is_array($result['items'])) {
++      $batch->setItems($result['items']);
++    }
++  }
++
++  /**
++   * Get an element identified by $element_key of the given item.
++   * The element key corresponds to the values in the array returned by
++   * FeedsParser::getMappingSources().
++   *
++   * This method is invoked from FeedsProcessor::map() when a concrete item is
++   * processed.
++   *
++   * @ingroup mappingapi
++   *
++   * @param $batch
++   *   FeedsImportBatch object containing the sources to be mapped from.
++   * @param $element_key
++   *   The key identifying the element that should be retrieved from $source
++   *
++   * @return
++   *   The source element from $item identified by $element_key.
++   *
++   * @see FeedsProcessor::map()
++   * @see FeedsCSVParser::getSourceElement().
++   */
++  public function getSourceElement(FeedsImportBatch $batch, $element_key) {
++    if (($node = $batch->feedNode()) && $element_key == 'parent:uid') {
++      return $node->uid;
++    }
++    $item = $batch->currentItem();
++    $fname = substr($element_key,0,6);
++    if ($fname == 'field_') {
++      $type = $item['rdf'][$element_key]['#attributes']['type'];
++      switch ($type) {
++        case 'text':
++          return $item['rdf'][$element_key][0]['value'];
++          break;
++        case 'filefield':
++          return $item['rdf'][$element_key][0]['full_url'];
++          break;
++        case 'email':
++          return $item['rdf'][$element_key][0]['email'];
++          break;
++        default:
++          return '';
++      }
++    } else {
++      return isset($item[$element_key]) ? $item[$element_key] : '';
++    }
++  }
++}
+Index: plugins/FeedsAtomRDFParser.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/plugins/FeedsAtomRDFParser.inc,v
+retrieving revision 1.1
+diff -u -p -r1.1 FeedsAtomRDFParser.inc
+--- plugins/FeedsAtomRDFParser.inc	21 Sep 2010 22:02:16 -0000	1.1
++++ plugins/FeedsAtomRDFParser.inc	19 Nov 2010 16:06:37 -0000
+@@ -40,6 +40,14 @@ class FeedsAtomRDFParser extends FeedsPa
+         'name' => t('Author name'),
+         'description' => t('Name of the feed item\'s author.'),
+       ),
++      'author_email' => array(
++        'name' => t('Author email'),
++        'description' => t('Email of the feed item\'s author.'),
++      ),
++      'author_url' => array(
++        'name' => t('Author url'),
++        'description' => t('Url of the feed item\'s author.'),
++      ),
+       'timestamp' => array(
+         'name' => t('Published date'),
+         'description' => t('Published date as UNIX time GMT of the feed item.'),
+Index: plugins/FeedsAtomRDFProcessor.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/plugins/FeedsAtomRDFProcessor.inc,v
+retrieving revision 1.1
+diff -u -p -r1.1 FeedsAtomRDFProcessor.inc
+--- plugins/FeedsAtomRDFProcessor.inc	21 Sep 2010 22:02:16 -0000	1.1
++++ plugins/FeedsAtomRDFProcessor.inc	19 Nov 2010 16:06:37 -0000
+@@ -18,7 +18,7 @@ class FeedsAtomRDFProcessor extends Feed
+       // If the item already exists and we're flagged to delete it, do that instead.
+       // This part is added from the parent class.
+       if (!empty($item['deleted'])) {
+-        $nid = $this->existingItemIdGlobal($item, $source);
++        $nid = $this->existingItemIdGlobal($batch, $source);
+         if (!empty($nid)) {
+           node_delete($nid);
+           continue;
+@@ -26,7 +26,7 @@ class FeedsAtomRDFProcessor extends Feed
+       }
+ 
+       // Create/update if item does not exist or update existing is enabled.
+-      $nid = empty($nid) ? $this->existingItemId($item, $source) : $nid;
++      $nid = empty($nid) ? $this->existingItemId($batch, $source) : $nid;
+       if (empty($nid) || $this->config['update_existing']) {
+ 
+         $node = new stdClass();
+@@ -66,7 +66,7 @@ class FeedsAtomRDFProcessor extends Feed
+ 
+         // Map and save nodes. If errors occur don't stop but report them.
+         try {
+-          $this->map($item, $node, $source);
++          $this->map($batch, $node, $source);
+           node_save($node);
+           if (!empty($nid)) {
+             $batch->updated++;
+@@ -113,7 +113,8 @@ class FeedsAtomRDFProcessor extends Feed
+    *
+    * @see sites/all/modules/feeds/plugins/FeedsNodeProcessor#existingItemId($source_item, $source)
+    */
+-  protected function existingItemIdGlobal($source_item, FeedsSource $source) {
++  protected function existingItemIdGlobal($batch, FeedsSource $source) {
++    $source_item = $batch->currentItem();
+     // Iterate through all unique targets and test whether they do already
+     // exist in the database.
+     foreach ($this->uniqueTargets($source_item) as $target => $value) {
+@@ -139,8 +140,10 @@ class FeedsAtomRDFProcessor extends Feed
+    * We also add a $source parameter that contains the FeedsSource object that
+    * controls this feed.
+    */
+-  protected function map($source_item, $target_item, $source) {
++  protected function map($batch, $target_item, $source) {
+     self::loadMappers();
++    
++    $source_item = $batch->currentItem();
+ 
+     // Static cache $targets as getMappingTargets() may be an expensive method.
+     static $targets;
+@@ -169,7 +172,7 @@ class FeedsAtomRDFProcessor extends Feed
+         // Set properties on the node.  There's a couple we know we don't want,
+         // because their meaning is site-specific anyway.
+         // @todo Replace this logic with the mapping engine for more flexibility.
+-        if (!in_array($key, array('nid', 'vid', 'revision_uid', 'log', 'created', 'changed', 'revision_timestamp', 'last_comment_timestamp'))) {
++        if (!in_array($key, array('nid', 'vid', 'revision_uid', 'log', 'created', 'changed', 'revision_timestamp', 'last_comment_timestamp', 'type'))) {
+           $target_item->$key = $value;
+         }
+       }
+@@ -181,7 +184,7 @@ class FeedsAtomRDFProcessor extends Feed
+     // stick it on the right place of the target item. If the mapping specifies
+     // a callback method, use the callback instead of setTargetElement().
+     foreach ($this->config['mappings'] as $mapping) {
+-      $value = $parser->getSourceElement($source_item, $mapping['source']);
++      $value = $parser->getSourceElement($batch, $mapping['source']);
+ 
+       if (is_array($targets[$this->id][$mapping['target']]) && isset($targets[$this->id][$mapping['target']]['callback']) && function_exists($targets[$this->id][$mapping['target']]['callback'])) {
+         $callback = $targets[$this->id][$mapping['target']]['callback'];

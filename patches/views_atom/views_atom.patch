@@ -1,0 +1,258 @@
+? views_atom.patch
+Index: views_atom.module
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.module,v
+retrieving revision 1.1
+diff -u -p -r1.1 views_atom.module
+--- views_atom.module	21 Sep 2010 21:36:52 -0000	1.1
++++ views_atom.module	19 Nov 2010 19:33:58 -0000
+@@ -89,7 +89,14 @@ function views_atom_get_feed_displays() 
+ function views_atom_guid($entity_type, $entity_id) {
+   // This is currently set to the absolute system path until a better UUID
+   // system can be implemented
+-  return url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE)));
++  $guid = url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE), 'language' => ''));
++  // See if there already exists a guid for this node
++  if ($entity_type == 'node' && module_exists('feeds')) {
++    if ($result = db_fetch_object(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = '%s'", $entity_id))) {
++      $guid = $result->guid;
++    }
++  }
++  return $guid;
+ }
+ 
+ /**
+@@ -130,7 +137,7 @@ function views_atom_sanitize($string) {
+ /**
+  * Implementation of hook_views_atom_render().
+  */
+-function content_views_atom_render($node, $entity_xml) {
++function content_views_atom_render($node, $entity_xml, $view = NULL) {
+   // If there are any Fields associated with this entity, those each get
+   // added via a <field> element.  Each <field> element is assumed to be
+   // multi-value, just as Fields in Drupal are.
+@@ -138,30 +145,56 @@ function content_views_atom_render($node
+   // This is totally the wrong way to do it, but CCK's API is too convoluted
+   // for me to figure out something else right now.
+   $result = db_query("SELECT field_name, type FROM {content_node_field}");
++  
++  // If $view != NULL, only show fields that are in the view
++  if ($view != NULL) {
++		$full_keys = array();
++		$keys = array_keys($view->field);
++		foreach ($keys as &$key) {
++			// Find position of the last _
++			$pos = strrpos($key, '_');
++			$view_id = $key;
++			$key = substr($key, 0, $pos);
++			$full_keys[$key] = $view_id;
++		}
++	}
++
+ 
+   while ($record = db_fetch_object($result)) {
+     if (!empty($node->{$record->field_name})) {
+-      $field = array_filter($node->{$record->field_name});
+-      $field_xml = $entity_xml->addChild('field');
+-      $field_xml->addAttribute('type', $record->type);
+-      $field_xml->addAttribute('name', $record->field_name);
+-      foreach ($field as $instance) {
+-        $field_instance_xml = $field_xml->addChild('field-instance');
+-        foreach ($instance as $column => $value) {
+-          $serialize = FALSE;
+-          if (is_array($value)) {
+-            $value = serialize($value);
+-            $serialize = TRUE;
+-          }
+-          $element_xml = $field_instance_xml->addChild('column', views_atom_sanitize($value));
+-          $element_xml->addAttribute('name', $column);
+-          if (!empty($serialize)) {
+-            $element_xml->addAttribute('serialize', $serialize);
++      $add_field = TRUE;
++      $label = $record->field_name;
++      if ($view != NULL) {
++        $view_id = $full_keys[$record->field_name];
++        if ($view->field[$view_id]->options['label']) { // If there is a label
++          $label = $view->field[$view_id]->options['label'];
++        }
++        if (!in_array($record->field_name, $keys) || $view->field[$view_id]->options['exclude']) {
++          $add_field = FALSE;
++        }
++      }
++      if ($add_field) {
++        $field = array_filter($node->{$record->field_name});
++        $field_xml = $entity_xml->addChild('field');
++        $field_xml->addAttribute('type', $record->type);
++        $field_xml->addAttribute('name', $label);
++        foreach ($field as $instance) {
++          $field_instance_xml = $field_xml->addChild('field-instance');
++          foreach ($instance as $column => $value) {
++            $serialize = FALSE;
++            if (is_array($value)) {
++              $value = serialize($value);
++              $serialize = TRUE;
++            }
++            $element_xml = $field_instance_xml->addChild('column', views_atom_sanitize($value));
++            $element_xml->addAttribute('name', $column);
++            if (!empty($serialize)) {
++              $element_xml->addAttribute('serialize', $serialize);
++            }
+           }
+         }
++        module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
+       }
+-
+-      module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
+     }
+   }
+ }
+Index: views_atom.theme.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.theme.inc,v
+retrieving revision 1.1
+diff -u -p -r1.1 views_atom.theme.inc
+--- views_atom.theme.inc	21 Sep 2010 21:36:52 -0000	1.1
++++ views_atom.theme.inc	19 Nov 2010 19:33:58 -0000
+@@ -118,11 +118,7 @@ function template_preprocess_views_atom_
+   }
+ 
+   foreach ($options['fields'] as $field => $column) {
+-    $alias = $view->field[$column]->field_alias;
+-    if (!empty($item->$alias)) {
+-      $vars[$field] = filter_xss_admin($item->$alias);
+-    }
+-    else if (!empty($view->style_plugin->rendered_fields[$result_id][$column])) {
++    if (!empty($view->style_plugin->rendered_fields[$result_id][$column])) {
+       $vars[$field] = filter_xss_admin($view->style_plugin->rendered_fields[$result_id][$column]);
+     } else {
+       $vars[$field] = '';
+Index: views_atom.views.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.views.inc,v
+retrieving revision 1.1
+diff -u -p -r1.1 views_atom.views.inc
+--- views_atom.views.inc	21 Sep 2010 21:36:52 -0000	1.1
++++ views_atom.views.inc	19 Nov 2010 19:33:58 -0000
+@@ -66,6 +66,19 @@ function views_atom_views_plugins() {
+     'type' => 'feed',
+     'parent' => 'rdf',
+   );
++  
++  $info['row']['rdf_node_custom'] = array(
++    'title' => t('RDF (Nodes) Custom'),
++    'help' => t('Displays the fields with their defined labels'),
++    'handler' => 'views_plugin_row_rdf_node_custom',
++    'theme' => 'views_view_rdf',
++    'theme file' => 'views_atom.theme.inc',
++    'theme path' => drupal_get_path('module', 'views_atom'),
++    'uses fields' => TRUE,
++    'uses options' => FALSE,
++    'type' => 'feed',
++    'parent' => 'rdf'
++  );
+ 
+   return $info;
+ }
+Index: views_plugin_row_rdf_node_custom.inc
+===================================================================
+RCS file: views_plugin_row_rdf_node_custom.inc
+diff -N views_plugin_row_rdf_node_custom.inc
+--- /dev/null	1 Jan 1970 00:00:00 -0000
++++ views_plugin_row_rdf_node_custom.inc	19 Nov 2010 19:33:58 -0000
+@@ -0,0 +1,96 @@
++<?php
++// $Id: views_plugin_row_rdf_node.inc,v 1.1 2010/09/21 21:36:52 crell Exp $
++
++/**
++ * @file
++ * Contains the RDF row style plugin.
++ */
++
++/**
++ * Plugin which performs a node_view on the resulting object
++ * and formats it as an RSS item.
++ */
++class views_plugin_row_rdf_node_custom extends views_plugin_row_rdf {
++  // Basic properties that let the row style follow relationships.
++  var $base_table = 'node';
++  var $base_field = 'nid';
++
++  function render($row) {
++    // For the most part, this code is taken from node_feed() in node.module
++    global $base_url;
++
++    $nid = $row->{$this->field_alias};
++    if (!is_numeric($nid)) {
++      return;
++    }
++
++    $node = node_load($nid);
++
++    // Allow other modules to modify the node before we start serializing it.
++    module_invoke_all('views_atom_prerender', $node);
++    module_invoke_all('views_atom_prerender_node', $node);
++
++    // We need to start with a DOMDocument because SimpleXML's namespace handling
++    // is abysmal.  Fortunately we can swap back and forth as needed.
++    // @todo: Add more common namespaces here if needed.
++    $dom = new DOMDocument('1.0');
++    $rdf_xml = $dom->createElementNS('http://www.w3.org/1999/02/22-rdf-syntax-ns', 'rdf:RDF');
++    $dom->appendChild($rdf_xml);
++
++    // Get a SimpleXML version of the object for serious manipulation, since
++    // its API is much easier to work with.
++    $xml = simplexml_import_dom($dom);
++
++    // Create the base entity element that wraps all Drupal data objects.
++    $entity_xml = $xml->addChild('entity', NULL, 'http://drupal.org/');
++
++    // Node type is more generically "bundle", at least in Drupal 7 speak.
++    $entity_xml->addAttribute('type', 'node');
++    $entity_xml->addAttribute('bundle', check_plain($node->type));
++
++    $entity_xml->addChild('title', views_atom_sanitize($node->title));
++
++    // Properties are primitive data associated with the entity.  These are
++    // standard by entity type.  Those all get wrapped in a <properties> element.
++    $properties_xml = $entity_xml->addChild('properties');
++
++
++    $keys = array_keys($this->view->field);
++    // Since we don't have a complete map of available properties, we'll just
++    // treat any primitive values on the node object as properties.  That will
++    // get more than we need, but it works well enough.
++    foreach ($node as $property => $value) {
++      if (is_scalar($value) && !empty($value)) {
++        // We want to map the date fields to Atom/RDF format properly.  The others
++        // we'll just send along as is.
++        if (in_array($property, array('created', 'changed'))) {
++          $properties_xml->addChild($property, date('c', $value));
++        }
++        else {
++          // Make sure the property is part of the view fields and not excluded from display
++          if (in_array($property, $keys) && !$this->view->field[$property]->options['exclude']) {
++            $properties_xml->addChild($property, views_atom_sanitize($value));
++          }
++        }
++      }
++    }
++
++    // Allow other modules the opportunity to get in on the XML conversion action.
++    module_invoke_all('views_atom_render', $node, $entity_xml, $this->view);
++    module_invoke_all('views_atom_render_node', $entity_xml);
++
++    drupal_alter('views_atom_render_rdf', $entity_xml, $node);
++
++    // Force pretty formatting to make debugging easier.  It doesn't actually
++    // affect parsing.  Note that because all objects in PHP are references
++    // this $dom variable still has all of the changes made above using SimpleXML.
++    // That's neat.
++    $dom->formatOutput = TRUE;
++
++    // This is stupid and bad, but I don't know of another way to supress the
++    // <?xml crap.
++    // @todo Find a better way to not get the XML declaration in the output.
++    $output = $dom->saveXML();
++    return str_replace('<?xml version="1.0"?>' . "\n", '', $output);
++  }
++}
