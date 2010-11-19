@@ -1,0 +1,6 @@
+; $Id$
+name = "PubSubHubbub pusher"
+description = "Pushes feeds of nodes to subscribers"
+core = 6.x
+package = "Other"
+dependencies[] = push_hub

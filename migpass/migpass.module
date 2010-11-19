@@ -1,0 +1,83 @@
+<?php
+
+// $Id$
+
+/**
+ * Implements hook_form_alter()
+ *  - Hooks the login form to authenticate the user login
+ */
+function migpass_form_alter(&$form, $form_state, $form_id) {
+	// The code of this function is adapted from the phpass Drupal module
+	// check for any login process
+	$validate = isset($form['#validate']) ? array_search('user_login_authenticate_validate', $form['#validate']) : FALSE;
+	
+	// Replace the login authentication validator.
+	if ($validate !== FALSE) {
+		$form['#validate'][$validate] = 'migpass_login_authenticate_validate';
+	}
+}
+
+/**
+ * This is a copy of user_login_authenticate_validate, that calls our validate
+ * instead of the default user validation.
+ * 
+ */
+function migpass_login_authenticate_validate($form, &$form_state) {
+	// Name and pass keys are required.
+	$form_values = $form_state['values'];
+	if (!empty($form_values['name']) && !empty($form_values['pass']) && $account = _migpass_user_authenticate($form_values['name'], trim($form_values['pass']))) {
+		global $user;
+		$user = $account;
+		user_authenticate_finalize($form_values);
+		return $user;
+	}
+}
+
+/**
+ * Tries to authenticate the user based on the users_migpass database first, and if it isn't in the DB, authenticates using
+ * the traditional method
+ */
+function _migpass_user_authenticate($name, $pass) {
+	// First, load the user by his name
+	$account = user_load(array('name' => $name));
+	if(!$account->uid) {
+		return user_authenticate(array('name' => $name, 'pass' => $pass));
+	} else {
+		// Look for account uid in table users_migpass
+		$sql = "SELECT hash FROM {users_migpass} WHERE uid = '%d';";
+		$result = db_query($sql, $account->uid);
+		if($hash = db_fetch_object($result)) {
+			// If there is one, try to authenticate using the encryption method given
+			$hash = $hash->hash;
+			$encryption_method = strstr($hash, ':', true);
+			$hash = strstr($hash, ':');
+			$hash = trim($hash, ':');
+			$encrypted_pass = call_user_func($encryption_method, $pass);
+			if(strcasecmp($encrypted_pass, $hash) == 0) {
+				// Authentication was successful
+				// Save the password encrypted as MD5 in the database
+				user_save($account, array('pass' => $pass));
+				// Delete the user from the users_migpass database
+				$sql = "DELETE FROM {users_migpass} WHERE uid = '%d';";
+				db_query($sql, $account->uid);
+				return $account;
+			} else {
+				// Try to authenticate using regular method but it should fail
+				return user_authenticate(array('name' => $name, 'pass' => $pass));
+			}
+		} else {
+			// Otherwise use the regular authentication method
+			return user_authenticate(array('name' => $name, 'pass' => $pass));
+		}
+	}
+}
+
+/**
+ * Deletes the password from the table when a user is deleted
+ */
+ function migpass_user($op, &$edit, &$account) {
+	 if($op == 'delete') {
+		 $sql = "DELETE FROM {users_migpass} WHERE uid = '%d';";
+		 db_query($sql, $account->uid);
+	}
+}	

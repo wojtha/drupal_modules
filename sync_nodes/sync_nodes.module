@@ -1,0 +1,28 @@
+<?php
+
+// $Id$
+
+/**
+ * @file
+ */
+
+/**
+ * Implementation of hook_feeds_plugins().
+ */
+function sync_nodes_feeds_plugins() {
+  $path = drupal_get_path('module', 'sync_nodes').'/plugins';
+  $info = array();
+  $info['SyncNodesProcessor'] = array(
+    'name' => 'Synchronized Nodes Processor',
+    'description' => 'Synchronize nodes between Drupal sites.',
+    'help' => 'Synchronize nodes between Drupal sites from content parsed.',
+    'handler' => array(
+      'parent' => 'FeedsNodeProcessor',
+      'class' => 'SyncNodesProcessor',
+      'file' => 'SyncNodesProcessor.inc',
+      'path' => $path
+    )
+  );
+      
+	return $info;
+}

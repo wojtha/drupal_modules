@@ -1,0 +1,46 @@
+<?php
+// $Id$
+
+/**
+* Installs the Migrate Password module
+* @file
+*/
+
+/**
+* Implementation of hook_install()
+*/
+function migpass_install() {
+    drupal_install_schema('migpass');
+    db_query("DELETE FROM {cache}");
+}
+
+/**
+* Implementation of hook_uninstall()
+*/
+function migpass_uninstall() {
+    drupal_uninstall_schema('migpass');
+}
+
+/**
+* Implementation of hook_schema()
+* @return array of Schema API table definitions.
+*/
+function migpass_schema() {
+	$schema['users_migpass'] = array(
+            'fields' => array(
+                'uid' => array(
+                                'description' => 'User uid',
+                                'type' => 'int',
+                                'not null' => TRUE
+                 ),
+                'hash' => array(
+                                'description' => 'The password encrypted using an encryption algorithm',
+                                'type' => 'varchar',
+                                'length' => 255,
+                                'default' => 'NULL'
+                 )
+             ),
+             'primary key' => array('uid')
+          );
+	return $schema;
+}

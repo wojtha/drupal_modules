@@ -1,0 +1,249 @@
+<?php
+
+// $Id$
+
+/**
+ * @file
+ */
+ 
+/**
+ * Implements hook_menu()
+ */
+function push_hub_pusher_menu() {
+  $items = array();
+  // Pubsubhubbub pusher
+  $items['admin/settings/push_hub_pusher'] = array(
+    'title' => 'PubSubHubbub pusher',
+    'page callback' => 'push_hub_pusher_configuration_page',
+    'access arguments' => array('administer site configuration'),
+    'description' => 'Allows you to configure the PubSubHubbub pusher',
+    'type' => MENU_NORMAL_ITEM
+  );
+  return $items;
+}
+
+
+
+/**
+ * Content types page
+ */
+function push_hub_pusher_configuration_page() {
+  $out = drupal_get_form('push_hub_pusher_configuration_form');
+  $list = push_hub_pusher_get_list();
+  $headers = array(t('Content type'), t('View'), t('Insert'), t('Update'), t('Delete'), t('Browser batching'), '');
+  $rows = array();
+  foreach ($list as $item) {
+    $rows[] = array($item->content_type, $item->view, 
+      drupal_get_form('push_hub_pusher_checkbox', $item->content_insert), 
+      drupal_get_form('push_hub_pusher_checkbox', $item->content_update), 
+      drupal_get_form('push_hub_pusher_checkbox', $item->content_delete), 
+      drupal_get_form('push_hub_pusher_checkbox', $item->browser_batch),
+      drupal_get_form('push_hub_pusher_remove_form', $item->pid));
+  }
+  $out .= theme('table', $headers, $rows);
+  return $out;
+}
+
+/**
+ * Configuration form
+ */
+function push_hub_pusher_configuration_form() {
+  $views = views_get_all_views();
+  $options = array();
+  foreach ($views as $view) {
+    $view_name = $view->name;
+    foreach ($view->display as $display_name => $display) {
+      if ($display->display_plugin == 'feed') {
+        $full_display_name = $view_name.'::'.$display_name;
+        $options[$full_display_name] = $full_display_name;
+      }
+    }
+  }
+  $cts = array_keys(node_get_types());
+  $ct_options = array();
+  foreach ($cts as $ct) {
+    $ct_options[$ct] = $ct;
+  }
+  
+  $form['type'] = array(
+    '#type' => 'select',
+    '#title' => 'Content type',
+    '#options' => $ct_options
+  );
+  
+  $form['view'] = array(
+    '#type' => 'select',
+    '#title' => 'View',
+    '#options' => $options
+  );
+  
+  $form['content_insert'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Use this on content insertion'
+  );
+  
+  $form['content_update'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Use this on content update'
+  );
+  
+  $form['content_delete'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Use this on content deletion'
+  );
+  
+  $form['browser_batch'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Use browser batching'
+  );
+  
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit'
+  );
+  
+  return $form;
+}
+
+function push_hub_pusher_configuration_form_submit($form, &$form_state) {
+  $type = $form['type']['#value'];
+  $view = $form['view']['#value'];
+  push_hub_pusher_write($type, $view, $form['content_insert']['#value'], $form['content_update']['#value'], $form['content_delete']['#value'], $form['browser_batch']['#value']);
+}
+
+function push_hub_pusher_remove_form($form_state, $pid) {
+  
+  $form['pid'] = array(
+    '#type' => 'hidden',
+    '#value' => $pid
+  );
+  
+  $form['remove'] = array(
+    '#type' => 'submit',
+    '#value' => 'Remove'
+  );
+  
+  return $form;
+}
+
+function push_hub_pusher_checkbox($form_state, $status) {
+  $form['checkbox'] = array(
+    '#type' => 'checkbox',
+    '#disabled' => TRUE,
+    '#value' => $status
+  );
+  
+  return $form;
+}
+
+
+function push_hub_pusher_remove_form_submit($form, &$form_state) {
+  $pid = $form['#post']['pid'];
+  push_hub_pusher_remove($pid);
+}
+
+/**
+ * Removes an item
+ */
+function push_hub_pusher_remove($pid) {
+  $sql = "DELETE FROM {push_hub_pusher} WHERE pid = %d";
+  db_query($sql, $pid);
+}
+
+/**
+ * Adds a content type associated to a view in the database
+ */
+function push_hub_pusher_write($type, $view, $insert, $update, $delete, $browser_batch) {
+  $sql = "SELECT COUNT(*) AS number FROM {push_hub_pusher} WHERE content_type = '%s' AND view = '%s' AND content_insert = %d AND content_update = %d AND content_delete = %d";
+  $result = db_query($sql, $type, $view, $insert, $update, $delete);
+  if ($result->number > 0) {
+    drupal_set_message(t('This combination already exists in the database'));
+  }
+  else {
+    $item = new stdClass();
+    $item->content_type = $type;
+    $item->view = $view;
+    $item->content_insert = $insert;
+    $item->content_update = $update;
+    $item->content_delete = $delete;
+    $item->browser_batch = $browser_batch;
+    drupal_write_record('push_hub_pusher', $item);
+  }
+}
+
+/**
+ * Returns the content types that have been configured to be pushed
+ */
+function push_hub_pusher_get_list() {
+  $sql = "SELECT * FROM {push_hub_pusher}";
+  $result = db_query($sql);
+  $return = array();
+  while ($row = db_fetch_object($result)) {
+    $return[] = $row;
+  }
+  return $return;
+}
+
+/**
+ * Implements hook_nodeapi()
+ */
+function push_hub_pusher_nodeapi($node, $op) {
+  // Don't do pushes on install or when site is off-line
+  $site_offline = variable_get('site_offline', 0);
+  if (in_array($op, array('insert', 'update', 'delete')) && (!defined('MAINTENANCE_MODE') || MAINTENANCE_MODE != 'install') && !$site_offline) {
+    $list = push_hub_pusher_get_list();
+    foreach ($list as $item) {
+      $var_name = 'content_'.$op;
+      if ($node->type == $item->content_type && $item->$var_name == TRUE) {
+        push_hub_pusher_notify($node, $item);
+      }
+    }
+  }
+}
+
+/**
+ * Notifies the subscribers that new content has been pushed
+ */
+function push_hub_pusher_notify($node, $item) {
+  $view_full_name = $item->view;
+  $batch = $item->browser_batch;
+  $nid = $node->nid;
+  // Reset the internal cache
+  $node = node_load(array('nid' => $nid), NULL, TRUE);
+  $view_name = strstr($view_full_name, '::', TRUE);
+  $display_name = strstr($view_full_name, '::');
+  $display_name = substr($display_name, 2);
+  $view = views_get_view($view_name);
+  
+  // Set display handler
+  $view->set_display($display_name);
+  
+  // Get display handler
+  $display = $view->display[$display_name]->handler;
+  $arguments = $display->get_option('arguments');
+  $argument_names = array_keys($arguments);
+  $display_arguments = array();
+  foreach($argument_names as $argument_name) {
+    $display_arguments[] = $node->$argument_name;
+  }
+  
+  // Start output buffer
+  ob_start();
+  $view->execute_display($display_name, $display_arguments);
+  $changed = ob_get_contents();
+  ob_end_clean();
+  
+  // Get display path
+  $path = $display->get_path();
+  // First, look if there are subscribers to the topic with the argument
+  $topic_path_with_id = url($path.'/'.$display_arguments[0], array('absolute' => TRUE, 'language' => ''));
+  $subscribers = push_hub()->allSubscribers($topic_path_with_id);
+  if (count($subscribers) > 0) {
+    // Notify
+    push_hub_notify($topic_path_with_id, $changed, $batch);
+  }
+  else {
+    push_hub_notify(url($path, array('absolute' => TRUE, 'language' => '')), $changed, $batch);
+  }
+}
+

@@ -1,0 +1,16 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * Installs the Sync nodes module.
+ */
+
+
+/**
+ * Implements hook_install().
+ */
+function sync_nodes_install() {
+  db_query("DELETE FROM {cache}");
+}
+

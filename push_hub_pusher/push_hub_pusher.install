@@ -1,0 +1,86 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * Installs the Agrovoc taxonomy module.
+ */
+
+
+/**
+ * Implements hook_install().
+ */
+function push_hub_pusher_install() {
+  drupal_install_schema('push_hub_pusher');
+  db_query("DELETE FROM {cache}");
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function push_hub_pusher_uninstall() {
+  drupal_uninstall_schema('push_hub_pusher');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function push_hub_pusher_schema() {
+  $schema['push_hub_pusher'] = array(
+    'description' => 'Relation table between a content type and a view to be used to push the content',
+    'fields' => array(
+      'pid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key'
+      ),
+      'content_type' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => ''
+      ),
+      'view' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => ''
+      ),
+      'content_insert' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Use this view on content insertion'
+      ),
+      'content_update' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Use this view on content update'
+      ),
+      'content_delete' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Use this view on content deletion'
+      ),
+      'browser_batch' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Use browser batching'
+      ),
+    ),
+    'primary key' => array('pid')
+  );
+  
+  return $schema;
+}

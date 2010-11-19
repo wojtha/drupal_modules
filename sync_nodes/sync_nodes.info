@@ -1,0 +1,6 @@
+; $Id$
+name = Sync Nodes
+description = Provides a feeds processor to synchronize nodes between Drupal sites
+core = 6.x
+dependencies[] = feeds
+package = Feeds

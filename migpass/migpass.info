@@ -1,0 +1,5 @@
+; $Id$
+name = Migrate password
+description = This module allows you to migrate password from a database using a specific encryption algorithm (such as sha1) to Drupal authentication system, which uses md5
+core = 6.x
+package = "Other"
