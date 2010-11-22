@@ -144,6 +144,18 @@ function sync_user_form() {
     $form['sync_user_host']['#disabled'] = TRUE;
     $form['sync_user_host']['#description'] .= ' '. l(t('To change this value, change the OpenID Provider on the OpenID Simple Sign-On page.'), 'admin/settings/openid-sso');
   }
+  $enabled_importers_ids = feeds_enabled_importers();
+  $enabled_importers = array();
+  foreach ($enabled_importers_ids as $enabled_importers_id) {
+    $enabled_importers[$enabled_importers_id] = $enabled_importers_id;
+  }
+  $form['sync_user_user_feed_importer'] = array(
+    '#type' => 'select',
+    '#options' => $enabled_importers,
+    '#title' => t('User feed importer'),
+    '#description' => t('User feed importer being used.'),
+    '#default_value' => variable_get('sync_user_user_feed_importer', 'user_updates')
+  );
   $form['sync_user_user_feed'] = array(
     '#type' => 'textfield',
     '#title' => t('User feed URL'),
@@ -156,6 +168,13 @@ function sync_user_form() {
       '#title' => t('Synchronize content profile'),
       '#description' => t('Whether to synchronize content profile'),
       '#default_value' => variable_get('sync_user_profile', FALSE)
+    );
+    $form['sync_user_profile_feed_importer'] = array(
+      '#type' => 'select',
+      '#options' => $enabled_importers,
+      '#title' => t('Profile feed importer'),
+      '#description' => t('Profile feed importer being used.'),
+      '#default_value' => variable_get('sync_user_profile_feed_importer', 'users')
     );
     $form['sync_user_profile_feed'] = array(
       '#type' => 'textfield',
@@ -235,7 +254,8 @@ function sync_user_on_login($uid) {
 function sync_user_subscribe($uid, $url) {
 
   if (valid_url($url)) {
-    $source = feeds_source('user_updates', $uid);
+    $user_updates = variable_get('sync_user_user_feed_importer', 'user_updates');
+    $source = feeds_source($user_updates, $uid);
     $source->addConfig(array(
       'KeyAuthHTTPFetcher' => array(
         'source' => $url,
@@ -253,7 +273,8 @@ function sync_user_subscribe($uid, $url) {
       $hub_uid = $matches[1];
       
       // Subscribe to profile feed
-      $psource = feeds_source('users', $uid);
+      $profile_importer = variable_get('sync_user_profile_feed_importer', 'users');
+      $psource = feeds_source($profile_importer, $uid);
       $psource->addConfig(array(
         'KeyAuthHTTPFetcher' => array(
           'source' => sync_user_profile_url($hub_uid)
@@ -266,9 +287,9 @@ function sync_user_subscribe($uid, $url) {
       
       // Get the feeds tamper attached to the importer and save them for this importer
       if (module_exists('feeds_tamper')) {
-        $tampers = feeds_tamper_get_attached('users', 0);
+        $tampers = feeds_tamper_get_attached($profile_importer, 0);
         if ($tampers) {
-          feeds_tamper_save_attached('users', $uid, $tampers);
+          feeds_tamper_save_attached($profile_importer, $uid, $tampers);
         }
       }
       
@@ -282,15 +303,17 @@ function sync_user_subscribe($uid, $url) {
  * Unsubscribe a user.
  */
 function sync_user_unsubscribe($uid) {
-  $source = feeds_source('user_updates', $uid);
-  $importer = feeds_importer('user_updates');
+  $user_importer = variable_get('sync_user_user_feed_importer', 'user_updates');
+  $source = feeds_source($user_importer, $uid);
+  $importer = feeds_importer($user_importer);
   $fetcher = $importer->fetcher;
   $fetcher->unsubscribe($source);
   $source->delete();
   
   if (variable_get('sync_user_profile', FALSE)) {
-    $psource = feeds_source('users', $uid);
-    $pimporter = feeds_importer('users');
+    $profile_importer = variable_get('sync_user_profile_feed_importer', 'users');
+    $psource = feeds_source($profile_importer, $uid);
+    $pimporter = feeds_importer($profile_importer);
     $pfetcher = $pimporter->fetcher;
     $pfetcher->unsubscribe($psource);
     $psource->delete();
