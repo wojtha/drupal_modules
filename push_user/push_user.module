@@ -12,6 +12,11 @@ function push_user_menu() {
    'access callback' => TRUE,
    'type' => MENU_CALLBACK,
   );
+  $items['sync/users/delete'] = array(
+    'page callback' => 'push_user_delete_feed',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
   return $items;
 }
 
@@ -32,6 +37,9 @@ function push_user_user($op, &$edit, &$account, $category = NULL) {
         // push_hub_notify(push_user_feed_url($account->uid), theme('push_user_feed', $account), TRUE);
       }
       break;
+    case 'delete':
+      push_hub_notify(push_user_deletes_feed_url($account->uid), NULL, TRUE);
+      break;
   }
 }
 
@@ -46,6 +54,12 @@ function push_user_theme() {
         'hub' => NULL,
       ),
       'template' => 'push_user_feed',
+    ),
+    'push_user_delete_feed' => array(
+      'arguments' => array(
+        'uid' => NULL
+      ),
+      'template' => 'push_user_delete_feed',
     ),
   );
 }
@@ -78,10 +92,32 @@ function push_user_feed() {
 }
 
 /**
+ * Feed of user deletes.
+ */
+function push_user_delete_feed() {
+  if ($_GET['uid']) {
+    $uid = $_GET['uid'];
+  }
+  if (isset($uid) && is_numeric($uid)) {
+    drupal_set_header('Content-Type: application/xml; charset=UTF-8');
+    print theme('push_user_delete_feed', $uid);
+    exit();
+  }
+  drupal_access_denied();
+}
+
+/**
  * Create a full feed URL for a given user.
  */
 function push_user_feed_url($uid) {
   return url('user/feed', array('query' => 'openid='. urlencode(url('user/'. $uid .'/identity', array('absolute' => TRUE, 'language' => ''))), 'absolute' => TRUE, 'language' => ''));
+}
+
+/**
+ * Create a full feed URL for user deletes
+ */
+function push_user_deletes_feed_url($uid) {
+  return url('sync/users/delete', array('query' => 'uid='.$uid, 'absolute' => TRUE, 'language' => ''));
 }
 
 /**
@@ -108,3 +144,16 @@ function template_preprocess_push_user_feed(&$vars) {
   $vars['user_mail'] = 'mailto:'. $account->mail;
 }
 
+/**
+ * Preprocessor for push_user_delete_feed.
+ */
+function template_preprocess_push_user_delete_feed(&$vars) {
+  $uid = $vars['uid'];
+  $vars['hub'] = url('pubsubhubbub/endpoint', array('absolute' => TRUE, 'language' => ''));
+  $vars['feed_url'] = push_user_deletes_feed_url($uid);
+  $vars['feed_title'] = t('Deleting uid @uid', array('@uid' => $uid));
+  $vars['updated'] = gmdate('Y-m-d\TH:i:s\Z'); // For lack of real updated date.
+  $vars['site_name'] = variable_get('site_name', 'Drupal');
+  $vars['site_url'] = url('', array('absolute' => TRUE, 'language' => ''));
+  $vars['user_openid'] = push_user_get_user_openid($uid);
+}

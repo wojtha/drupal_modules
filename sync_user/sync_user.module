@@ -49,6 +49,16 @@ function sync_user_feeds_plugins() {
 	      'path' => $path,
 	    ),
 	  );
+  $info['SyncUserDeleteProcessor'] = array(
+    'name' => 'Sync User Delete processor',
+    'description' => 'Deletes user account information from feeds parsed using FeedsAtomRDFParser',
+    'handler' => array(
+      'parent' => 'FeedsUserProcessor',
+      'class' => 'SyncUserDeleteProcessor',
+      'file' => 'SyncUserDeleteProcessor.inc',
+      'path' => $path,
+    ),
+  );
       
 	return $info;
 }
@@ -72,60 +82,6 @@ function sync_user_user($op, &$edit, &$account, $category = NULL) {
     case 'login':
       sync_user_on_login($account->uid);
       break;
-  }
-}
-
-/**
- * Implementation of hook_form_alter().
- */
-function sync_user_form_alter(&$form, $form_state, $form_id) {
-  // Do not allow users to modify their email or password in a relying party: this must be done on the hub
-  if ($form_id == 'user_profile_form' && !user_access('administer users')) {
-    $provider = variable_get('openid_sso_provider', array('name' => 'Hub', 'url' => 'http://example.com/'));
-    $form['account']['message']['#value'] = t('@site is a partner of the <a href="@hub_url">@hub</a>. If you want to edit your account information (such as email and password), you must do it on the <a href="@hub_url">@hub</a>.',
-    array(
-      '@site' => variable_get('site_name', 'Drupal'),
-      '@hub' => $provider['name'],
-      '@hub_url' => $provider['url']
-    ));
-    $form['account']['mail']['#disabled'] = TRUE;
-    $form['account']['mail']['#value'] = $form['account']['mail']['#default_value'];
-    unset($form['account']['pass']);
-  }
-  if ($form_id == 'user_profile_form' && user_access('administer users')) {
-    $account = $form['_account']['#value'];
-    if ($importer = feeds_importer('user_updates')) {
-      // Build form.
-      $source = feeds_source($importer->id, $account->uid);
-      $form['sync_user_feed'] = array(
-        '#type' => 'fieldset',
-        '#title' => t('Synchronization feed'),
-        '#description' => t('This URL is generated based on !sync_settings.', array('!sync_settings' => l(t('Synchronize users settings'), 'admin/user/sync'))),
-      );
-      $form['sync_user_feed']['resubscribe'] = array(
-        '#value' => t('Subscribe'),
-        '#type' => 'submit',
-        '#submit' => array('sync_user_subscribe_submit'),
-        '#weight' => 2,
-      );
-      if ($url = $source->config['KeyAuthHTTPFetcher']['source']) {
-        $form['sync_user_feed']['url']['#value'] = '<div class="sub-url">'. l(check_plain($url), $url) .'</div>';
-        $form['sync_user_feed']['resubscribe']['#value'] = t('Refresh subscription');
-      }
-    }
-  }
-}
-
-/**
- * Submit handler for subscription button.
- */
-function sync_user_subscribe_submit($form, &$form_state) {
-  $uid = $form_state['values']['_account']->uid;
-  if ($openid = sync_user_openid($uid)) {
-    if ($url = sync_user_subscription_url($openid)) {
-      sync_user_unsubscribe($uid);
-      sync_user_subscribe($uid, $url);
-    }
   }
 }
 
@@ -161,6 +117,19 @@ function sync_user_form() {
     '#title' => t('User feed URL'),
     '#description' => t('User feed URL WITHOUT host URL. Must NOT have a trailing slash'),
     '#default_value' => variable_get('sync_user_user_feed', 'user/feed')
+  );
+  $form['sync_user_user_deletes_feed_importer'] = array(
+    '#type' => 'select',
+    '#options' => $enabled_importers,
+    '#title' => t('User delete feed importer'),
+    '#description' => t('User delete feed importer being used.'),
+    '#default_value' => variable_get('sync_user_user_deletes_feed_importer', 'user_deletes')
+  );
+  $form['sync_user_user_deletes_feed'] = array(
+    '#type' => 'textfield',
+    '#title' => t('User delete feed URL'),
+    '#description' => t('User delete feed URL WITHOUT host URL. Must NOT have a trailing slash.'),
+    '#default_value' => variable_get('sync_user_user_deletes_feed', 'sync/users/delete')
   );
   if (module_exists('content_profile')) {
     $form['sync_user_profile'] = array(
@@ -203,6 +172,16 @@ function sync_user_profile_url($uid) {
   $url = sync_user_host();
   $url .= variable_get('sync_user_profile_feed', 'sync/profiles');
   $url .= '/'.$uid;
+  return $url;
+}
+
+/**
+ * Construct user delete URL
+ */
+function sync_user_delete_url($uid) {
+  $url = sync_user_host();
+  $url .= variable_get('sync_user_user_deletes_feed', 'sync/users/delete');
+  $url .= '?uid='.$uid;
   return $url;
 }
 
@@ -263,14 +242,25 @@ function sync_user_subscribe($uid, $url) {
     ));
     $source->save();
     
+    // Determine uid on hub
+    $decoded_url = urldecode($url);
+    $url_array = parse_url($decoded_url);
+    $query = $url_array['query'];
+    parse_str($query);
+    preg_match('/user\/(\d*?)\/identity/', $openid, $matches);
+    $hub_uid = $matches[1];
+    
+    // Subscribing to delete feed
+    $user_deletes = variable_get('sync_user_user_deletes_feed_importer', 'user_deletes');
+    $source = feeds_source($user_deletes, $uid);
+    $source->addConfig(array(
+      'KeyAuthHTTPFetcher' => array(
+        'source' => sync_user_delete_url($hub_uid)
+      )
+    ));
+    $source->save();
+    
     if (variable_get('sync_user_profile', FALSE)) {
-      // Determine uid on hub
-      $decoded_url = urldecode($url);
-      $url_array = parse_url($decoded_url);
-      $query = $url_array['query'];
-      parse_str($query);
-      preg_match('/user\/(\d*?)\/identity/', $openid, $matches);
-      $hub_uid = $matches[1];
       
       // Subscribe to profile feed
       $profile_importer = variable_get('sync_user_profile_feed_importer', 'users');

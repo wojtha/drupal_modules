@@ -32,8 +32,8 @@ function _sync_user_feeds_importer_default() {
       'config' => array(
         'use_pubsubhubbub' => 1,
         'designated_hub' => '',
-        'use_keyauth' => 1,
-        'keyauth_public' => '7fb5490cce31840608ec635a931c00aa',
+        'use_keyauth' => 0, // Disabled for now
+        //'keyauth_public' => '7fb5490cce31840608ec635a931c00aa',
       ),
     ),
     'parser' => array(
@@ -71,8 +71,50 @@ function _sync_user_feeds_importer_default() {
     'expire_period' => 3600,
     'import_on_create' => 0,
   );
+  
+  $user_deletes = new stdClass;
+  $user_deletes->disabled = FALSE; /* Edit this to true to make a default feeds_importer disabled initially */
+  $user_deletes->api_version = 1;
+  $user_deletes->id = 'user_deletes';
+  $user_deletes->config = array(
+    'name' => 'User deletes',
+    'description' => 'Deletes users on this site based on OpenID Provider feed.',
+    'fetcher' => array(
+      'plugin_key' => 'KeyAuthHTTPFetcher',
+      'config' => array(
+        'use_pubsubhubbub' => 1,
+        'designated_hub' => '',
+        'use_keyauth' => 0 // Disabled for now
+      ),
+    ),
+    'parser' => array(
+      'plugin_key' => 'FeedsAtomRDFParser',
+      'config' => array(),
+    ),
+    'processor' => array(
+      'plugin_key' => 'SyncUserDeleteProcessor',
+      'config' => array(
+        'roles' => array(),
+        'update_existing' => 1,
+        'status' => '1',
+        'mappings' => array(
+          '0' => array(
+            'source' => 'guid',
+            'target' => 'openid',
+            'unique' => 1,
+          ),
+        ),
+      ),
+    ),
+    'content_type' => 'page',
+    'update' => 0,
+    'import_period' => '604800',
+    'expire_period' => 3600,
+    'import_on_create' => 0,
+  );
 
   $export['user_updates'] = $feeds_importer;
+  $export['user_deletes'] = $user_deletes;
   return $export;
 }
 
