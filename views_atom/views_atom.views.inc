@@ -66,6 +66,19 @@ function views_atom_views_plugins() {
     'type' => 'feed',
     'parent' => 'rdf',
   );
+  
+  $info['row']['rdf_node_custom'] = array(
+    'title' => t('RDF (Nodes) Custom'),
+    'help' => t('Displays the fields with their defined labels'),
+    'handler' => 'views_plugin_row_rdf_node_custom',
+    'theme' => 'views_view_rdf',
+    'theme file' => 'views_atom.theme.inc',
+    'theme path' => drupal_get_path('module', 'views_atom'),
+    'uses fields' => TRUE,
+    'uses options' => FALSE,
+    'type' => 'feed',
+    'parent' => 'rdf'
+  );
 
   return $info;
 }

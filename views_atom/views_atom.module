@@ -89,7 +89,14 @@ function views_atom_get_feed_displays() {
 function views_atom_guid($entity_type, $entity_id) {
   // This is currently set to the absolute system path until a better UUID
   // system can be implemented
-  return url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE)));
+  $guid = url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE), 'language' => ''));
+  // See if there already exists a guid for this node
+  if ($entity_type == 'node' && module_exists('feeds')) {
+    if ($result = db_fetch_object(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = '%s'", $entity_id))) {
+      $guid = $result->guid;
+    }
+  }
+  return $guid;
 }
 
 /**
@@ -130,7 +137,7 @@ function views_atom_sanitize($string) {
 /**
  * Implementation of hook_views_atom_render().
  */
-function content_views_atom_render($node, $entity_xml) {
+function content_views_atom_render($node, $entity_xml, $view = NULL) {
   // If there are any Fields associated with this entity, those each get
   // added via a <field> element.  Each <field> element is assumed to be
   // multi-value, just as Fields in Drupal are.
@@ -138,30 +145,56 @@ function content_views_atom_render($node, $entity_xml) {
   // This is totally the wrong way to do it, but CCK's API is too convoluted
   // for me to figure out something else right now.
   $result = db_query("SELECT field_name, type FROM {content_node_field}");
+  
+  // If $view != NULL, only show fields that are in the view
+  if ($view != NULL) {
+		$full_keys = array();
+		$keys = array_keys($view->field);
+		foreach ($keys as &$key) {
+			// Find position of the last _
+			$pos = strrpos($key, '_');
+			$view_id = $key;
+			$key = substr($key, 0, $pos);
+			$full_keys[$key] = $view_id;
+		}
+	}
+
 
   while ($record = db_fetch_object($result)) {
     if (!empty($node->{$record->field_name})) {
-      $field = array_filter($node->{$record->field_name});
-      $field_xml = $entity_xml->addChild('field');
-      $field_xml->addAttribute('type', $record->type);
-      $field_xml->addAttribute('name', $record->field_name);
-      foreach ($field as $instance) {
-        $field_instance_xml = $field_xml->addChild('field-instance');
-        foreach ($instance as $column => $value) {
-          $serialize = FALSE;
-          if (is_array($value)) {
-            $value = serialize($value);
-            $serialize = TRUE;
-          }
-          $element_xml = $field_instance_xml->addChild('column', views_atom_sanitize($value));
-          $element_xml->addAttribute('name', $column);
-          if (!empty($serialize)) {
-            $element_xml->addAttribute('serialize', $serialize);
-          }
+      $add_field = TRUE;
+      $label = $record->field_name;
+      if ($view != NULL) {
+        $view_id = $full_keys[$record->field_name];
+        if ($view->field[$view_id]->options['label']) { // If there is a label
+          $label = $view->field[$view_id]->options['label'];
+        }
+        if (!in_array($record->field_name, $keys) || $view->field[$view_id]->options['exclude']) {
+          $add_field = FALSE;
         }
       }
-
-      module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
+      if ($add_field) {
+        $field = array_filter($node->{$record->field_name});
+        $field_xml = $entity_xml->addChild('field');
+        $field_xml->addAttribute('type', $record->type);
+        $field_xml->addAttribute('name', $label);
+        foreach ($field as $instance) {
+          $field_instance_xml = $field_xml->addChild('field-instance');
+          foreach ($instance as $column => $value) {
+            $serialize = FALSE;
+            if (is_array($value)) {
+              $value = serialize($value);
+              $serialize = TRUE;
+            }
+            $element_xml = $field_instance_xml->addChild('column', views_atom_sanitize($value));
+            $element_xml->addAttribute('name', $column);
+            if (!empty($serialize)) {
+              $element_xml->addAttribute('serialize', $serialize);
+            }
+          }
+        }
+        module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
+      }
     }
   }
 }

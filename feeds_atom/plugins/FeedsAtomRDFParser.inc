@@ -40,6 +40,14 @@ class FeedsAtomRDFParser extends FeedsParser {
         'name' => t('Author name'),
         'description' => t('Name of the feed item\'s author.'),
       ),
+      'author_email' => array(
+        'name' => t('Author email'),
+        'description' => t('Email of the feed item\'s author.'),
+      ),
+      'author_url' => array(
+        'name' => t('Author url'),
+        'description' => t('Url of the feed item\'s author.'),
+      ),
       'timestamp' => array(
         'name' => t('Published date'),
         'description' => t('Published date as UNIX time GMT of the feed item.'),

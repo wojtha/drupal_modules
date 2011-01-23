@@ -46,20 +46,24 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
     }
     $item = $batch->currentItem();
     $fname = substr($element_key,0,6);
-    if ($fname == 'field_') {
-      $type = $item['rdf'][$element_key]['#attributes']['type'];
-      switch ($type) {
-        case 'text':
-          return $item['rdf'][$element_key][0]['value'];
-          break;
-        case 'filefield':
-          return $item['rdf'][$element_key][0]['full_url'];
-          break;
-        case 'email':
-          return $item['rdf'][$element_key][0]['email'];
-          break;
-        default:
-          return '';
+    if ($fname == 'field_' || $element_key == 'body') {
+      if ($fname == 'field_') {
+        $type = $item['rdf'][$element_key]['#attributes']['type'];
+        switch ($type) {
+          case 'text':
+            return $item['rdf'][$element_key][0]['value'];
+            break;
+          case 'filefield':
+            return $item['rdf'][$element_key][0]['full_url'];
+            break;
+          case 'email':
+            return $item['rdf'][$element_key][0]['email'];
+            break;
+          default:
+            return '';
+        }
+      } else {
+        return $item['rdf'][$element_key];
       }
     } else {
       return isset($item[$element_key]) ? $item[$element_key] : '';

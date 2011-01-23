@@ -217,14 +217,32 @@ function atomrdf_parse($feed_XML,$feed_raw) {
     $author_found = FALSE;
     if (!empty($news->source->author->name)) {
       $original_author = "{$news->source->author->name}";
+      if (!empty($news->source->author->email)) {
+        $original_author_email = "{$news->source->author->email}";
+      }
+      if (!empty($news->source->author->url)) {
+        $original_author_url = "{$news->source->author->url}";
+      }
       $author_found = TRUE;
     }
     else if (!empty($news->author->name)) {
       $original_author = "{$news->author->name}";
+      if (!empty($news->author->email)) {
+        $original_author_email = "{$news->author->email}";
+      }
+      if (!empty($news->author->url)) {
+        $original_author_url = "{$news->author->url}";
+      }
       $author_found = TRUE;
     }
     if (!empty($feed_XML->author->name) && !$author_found) {
       $original_author = "{$feed_XML->author->name}";
+      if (!empty($feed_XML->author->email)) {
+        $original_author_email = "{$feed_XML->author->email}";
+      }
+      if (!empty($feed_XML->author->url)) {
+        $original_author_url = "{$feed_XML->author->url}";
+      }
     }
 
     // some src elements in some valid atom feeds contained no urls at all
@@ -245,6 +263,8 @@ function atomrdf_parse($feed_XML,$feed_raw) {
     $item['title'] = _parser_common_syndication_title($title, $body);
     $item['description'] = $body;
     $item['author_name'] = $original_author;
+    $item['author_email'] = $original_author_email;
+    $item['author_url'] = $original_author_url;
     $item['timestamp'] = _parser_common_syndication_parse_date(isset($news->published) ? "{$news->published}" : "{$news->issued}");
     $item['tags'] = isset($additional_taxonomies['ATOM Categories']) ? $additional_taxonomies['ATOM Categories'] : array();
     $item['domains'] = isset($additional_taxonomies['ATOM Domains']) ? $additional_taxonomies['ATOM Domains'] : array();

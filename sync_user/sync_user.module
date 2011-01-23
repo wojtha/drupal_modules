@@ -86,6 +86,26 @@ function sync_user_user($op, &$edit, &$account, $category = NULL) {
 }
 
 /**
+ * Implementation of hook_form_alter().
+ */
+function sync_user_form_alter(&$form, $form_state, $form_id) {
+  // Do not allow users to modify their email or password in a relying party: this must be done on the hub
+  if ($form_id == 'user_profile_form' && !user_access('administer users')) {
+    $provider = variable_get('openid_sso_provider', array('name' => 'Hub', 'url' => 'http://example.com/'));
+    $form['account']['message']['#value'] = t('@site is a partner of the <a href="@hub_url">@hub</a>. If you want to edit your account information (such as email and password), you must do it on the <a href="@hub_url">@hub</a>.',
+    array(
+      '@site' => variable_get('site_name', 'Drupal'),
+      '@hub' => $provider['name'],
+      '@hub_url' => $provider['url']
+    ));
+    $form['account']['mail']['#disabled'] = TRUE;
+    $form['account']['mail']['#value'] = $form['account']['mail']['#default_value'];
+    unset($form['account']['pass']);
+  }
+}
+
+
+/**
  * Settings form.
  */
 function sync_user_form() {

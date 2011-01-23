@@ -22,6 +22,17 @@ function feeds_atom_feeds_plugins() {
       'path' => $path
     )
   );
+  
+  $info['FeedsAtomRDFCustomParser'] = array(
+    'name' => 'FeedsAtomRDF Custom parser',
+    'description' => 'Parses data in Atom RDF format and allows you to define your own mapping.',
+    'handler' => array(
+      'parent' => 'FeedsParser',
+      'class' => 'FeedsAtomRDFCustomParser',
+      'file' => 'FeedsAtomRDFCustomParser.inc',
+      'path' => $path
+    )
+  );
 
   $info['FeedsAtomRDFProcessor'] = array(
     'name' => 'FeedsAtomRDF Processing Stage',
