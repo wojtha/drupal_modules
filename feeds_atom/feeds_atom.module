@@ -1,0 +1,143 @@
+<?php
+
+define('FEEDS_ATOM_TOMBSTONE_NAMESPACE', 'http://purl.org/atompub/tombstones/1.0');
+
+function feeds_atom_ctools_plugin_api($owner, $api) {
+  if ($owner == 'feeds' && $api == 'plugins') {
+    return array('version' => 1);
+  }
+}
+
+function feeds_atom_feeds_plugins() {
+
+  $path = drupal_get_path('module', 'feeds_atom') .'/plugins';
+
+  $info['FeedsAtomRDFParser'] = array(
+    'name' => 'FeedsAtomRDF parser',
+    'description' => 'Parse data in Atom RDF format.',
+    'handler' => array(
+      'parent' => 'FeedsParser',
+      'class' => 'FeedsAtomRDFParser',
+      'file' => 'FeedsAtomRDFParser.inc',
+      'path' => $path
+    )
+  );
+
+  $info['FeedsAtomRDFProcessor'] = array(
+    'name' => 'FeedsAtomRDF Processing Stage',
+    'description' => 'Process my stuff.',
+    'help' => 'Processing stage of parsed data.',
+    'handler' => array(
+      'parent' => 'FeedsNodeProcessor',
+      'class' => 'FeedsAtomRDFProcessor',
+      'file' => 'FeedsAtomRDFProcessor.inc',
+      'path' => $path
+    )
+  );
+
+  return $info;
+}
+
+/**
+ * Implementation of hook_feeds_atom_rdf_map_alter().
+ *
+ * We implement this hook on behalf of the taxonomy module so that we can
+ * lazy-create terms as needed.  We only do so if the vocabulary the term is in
+ * already exists.  If the vocabulary doesn't exist, the incoming term is ignored.
+ *
+ * @param $target_item
+ *   The node that we are creating/editing.
+ * @param $source_item
+ *   The parsed data array from the feed.
+ * @return unknown_type
+ */
+function taxonomy_feeds_atom_rdf_map_alter(&$target_item, $source_item) {
+  if (empty($source_item['rdf']['taxonomy']) || !is_array($source_item['rdf']['taxonomy'])) {
+    // Nothing to process
+    return;
+  }
+
+  // Zero out the taxonomy data that is already there, as it will break if we
+  // try to save the node with it there.
+  $target_item->taxonomy = array();
+
+  // Process the term data.
+  foreach ($source_item['rdf']['taxonomy'] as $source_term) {
+    // Add new terms if they don't exist
+    $term = db_fetch_object(db_query("SELECT * FROM {term_data} WHERE name = '%s'", $source_term['title']));
+    if ($term) {
+      $tid = $term->tid;
+    }
+    else {
+      $vocabulary = db_fetch_object(db_query("SELECT * FROM {vocabulary} WHERE name = '%s'", $source_term['vocabulary']));
+      if (!empty($vocabulary->vid)) {
+        // Create the new term.
+        $new_term = array(
+          'vid' => $vocabulary->vid,
+          'name' => $source_term['title'],
+          'description' => $source_term['description'],
+        );
+        drupal_write_record('term_data', $new_term);
+        $tid = db_last_insert_id('term_data', 'tid');
+        $term_hierarchy = array('tid' => $tid, 'parent' => 0);
+        drupal_write_record('term_hierarchy', $term_hierarchy);
+      }
+      else {
+        // Skip the term, there is not a similar vocabulary.
+      }
+    }
+
+    // Apply the term to the target node.
+    if (!empty($tid)) {
+      $term = taxonomy_get_term($tid, TRUE);
+      $target_item->taxonomy[$term->tid] = $term;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_feeds_atom_rdf_map_alter().
+ */
+function filefield_feeds_atom_rdf_map_alter(&$target_item, $source_item, FeedsSource $source) {
+
+  // For any filefield in the incoming data, check to see if a full URL to the file
+  // is specified.  If so, import it outright.
+  foreach ($source_item['rdf'] as $field_name => $field) {
+    $target_field = &$target_item->$field_name;
+    $field_info = content_fields($field_name, $target_item->type);
+    if (!empty($field['#attributes']['type']) && $field['#attributes']['type'] == 'filefield') {
+      foreach ($field as $i => $instance) {
+
+        // This is only the case if the field in question is a filefield and
+        // not the #attributes element.
+        if (!empty($instance['full_url'])) {
+
+          // FeedsEnclosureUnique will ensure that a file is only downloaded once.
+          $enclosure = new FeedsEnclosureUnique($instance['full_url'], $instance['filemime']);
+          if ($file = $enclosure->getFile()) {
+            $target_dir = filefield_widget_file_path($field_info, user_load($target_item->uid));
+            if ($info = $enclosure->saveTo($target_dir)) {
+              $info['list'] = array();
+              $info['data'] = array('description' => '');
+              if ($field_info['list_field']) {
+                $info['list'] = $field_info['list_default'];
+              }
+              $target_field[$i] = $info;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_file_delete().
+ */
+function feeds_atom_file_delete($file) {
+
+  // Clean up our extra tracking information.
+  db_query("DELETE FROM {feeds_atom_file_import} WHERE fid = %d", $file->fid);
+}
+
+

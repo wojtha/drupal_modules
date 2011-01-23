@@ -1,0 +1,32 @@
+<?php
+
+/**
+ * Implementation of hook_install().
+ */
+function feeds_atom_install() {
+  drupal_install_schema('feeds_atom');
+}
+
+/**
+ * Implementation of hook_schema().
+ */
+function feeds_atom_schema() {
+  $schema['feeds_atom_file_import'] = array(
+    'fields' => array(
+      'fid' => array(
+        'description' => t('The file id that we have imported.'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'sha1' => array(
+        'description' => t('sha1 hash of this file.'),
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('fid'),
+  );
+
+  return $schema;
+}
