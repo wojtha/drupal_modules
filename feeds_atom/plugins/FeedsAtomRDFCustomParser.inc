@@ -11,9 +11,9 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
   public function parse(FeedsImportBatch $batch, FeedsSource $source) {
     require_once './' . drupal_get_path('module','feeds_atom') . '/libraries/atomrdf_parser.inc';
     $result = atomrdf_parser_parse($batch->getRaw());
-    $batch->setTitle($result['title']);
-    $batch->setDescription($result['description']);
-    $batch->setLink($result['link']);
+    $batch->title = $result['title'];
+    $batch->description = $result['description'];
+    $batch->link = $result['link'];
     if (is_array($result['items'])) {
       $batch->setItems($result['items']);
     }
@@ -46,7 +46,7 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
     }
     $item = $batch->currentItem();
     $fname = substr($element_key,0,6);
-    if ($fname == 'field_' || $element_key == 'body') {
+    if ($fname == 'field_' || in_array($element_key, array('body', 'created', 'changed', 'uid'))) {
       if ($fname == 'field_') {
         $type = $item['rdf'][$element_key]['#attributes']['type'];
         switch ($type) {
@@ -63,7 +63,16 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
             return '';
         }
       } else {
-        return $item['rdf'][$element_key];
+        if (in_array($element_key, array('created', 'changed'))) {
+          return strtotime($item['rdf'][$element_key]);
+        }
+        elseif ($element_key == 'uid') {
+          $user = user_load(array('mail' => $item['author_email']));
+          return $user->uid;
+        }
+        else {
+          return $item['rdf'][$element_key];
+        }
       }
     } else {
       return isset($item[$element_key]) ? $item[$element_key] : '';

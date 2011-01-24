@@ -66,4 +66,59 @@ class KeyAuthHTTPFetcher extends FeedsHTTPFetcher {
     }
     return $url;
   }
+  
+    /**
+   * Implementation of FeedsFetcher::request().
+   */
+  /*public function request($feed_nid = 0) {
+    feeds_dbg($_GET);
+    @feeds_dbg(file_get_contents('php://input'));
+    // A subscription verification has been sent, verify.
+    if (isset($_GET['hub_challenge'])) {
+      $this->subscriber($feed_nid)->verifyRequest();
+    }
+    // No subscription notification has ben sent, we are being notified.
+    else {
+      $changed = file_get_contents('php://input');
+      // The hub sent us the changed content. We don't need to fetch anything, we can directly parse it
+      if ($changed) {
+        try {
+          $batch = new FeedsImportBatch($changed);
+          $source = feeds_source($this->id, $feed_nid)->existing();
+          $importer = feeds_importer($this->id);
+          $importer->parser->parse($batch, $source);
+          module_invoke_all('feeds_after_parse', $importer, $source);
+          $importer->processor->process($batch, $source);
+          $result = $batch->getProgress();
+          if ($result == FEEDS_BATCH_COMPLETE) {
+            unset($batch);
+            module_invoke_all('feeds_after_import', $importer, $source);
+          }
+        }
+        catch (Exception $e) {
+          unset($batch);
+          $source->save();
+          watchdog('KeyAuthHTTPFetcher', t('An exception occured: %exception', array('%exception' => $e->getMessage())));
+          // In case of an error, respond with a 503 Service (temporary) unavailable.
+          header('HTTP/1.1 503 "Not Found"', null, 503);
+          exit();
+        }
+        $source->save();
+      }
+      else {
+        try {
+          feeds_source($this->id, $feed_nid)->existing()->import();
+        }
+        catch (Exception $e) {
+          watchdog('KeyAuthHTTPFetcher', t('An exception occured: %exception', array('%exception' => $e->getMessage())));
+          // In case of an error, respond with a 503 Service (temporary) unavailable.
+          header('HTTP/1.1 503 "Not Found"', null, 503);
+          exit();
+        }
+      }
+    }
+    // Will generate the default 200 response.
+    header('HTTP/1.1 200 "OK"', null, 200);
+    exit();
+  }*/
 }
