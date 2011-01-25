@@ -14,6 +14,26 @@ class views_plugin_row_rdf_node_custom extends views_plugin_row_rdf {
   // Basic properties that let the row style follow relationships.
   var $base_table = 'node';
   var $base_field = 'nid';
+  
+  function option_definition() {
+    $options = parent::option_definition();
+    $options['taxonomy_mapping'] = array('default' => '');
+
+    return $options;
+  }
+
+  /**
+   * Provide a form for setting options.
+   */
+  function options_form(&$form, &$form_state) {
+    
+    $form['taxonomy_mapping'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Taxonomy mapping'),
+      '#description' => t('Enter the mapping of the vocabularies, under the form key|label, one per line'),
+      '#default_value' => $this->options['taxonomy_mapping']
+    );
+  }
 
   function render($row) {
     // For the most part, this code is taken from node_feed() in node.module
@@ -76,7 +96,7 @@ class views_plugin_row_rdf_node_custom extends views_plugin_row_rdf {
     }
 
     // Allow other modules the opportunity to get in on the XML conversion action.
-    module_invoke_all('views_atom_render', $node, $entity_xml, $this->view);
+    module_invoke_all('views_atom_render', $node, $entity_xml, $this);
     module_invoke_all('views_atom_render_node', $entity_xml);
 
     drupal_alter('views_atom_render_rdf', $entity_xml, $node);

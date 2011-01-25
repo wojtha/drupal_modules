@@ -137,7 +137,11 @@ function views_atom_sanitize($string) {
 /**
  * Implementation of hook_views_atom_render().
  */
-function content_views_atom_render($node, $entity_xml, $view = NULL) {
+function content_views_atom_render($node, $entity_xml, $display = NULL) {
+  $view = NULL;
+  if ($display != NULL) {
+    $view = $display->view;
+  }
   // If there are any Fields associated with this entity, those each get
   // added via a <field> element.  Each <field> element is assumed to be
   // multi-value, just as Fields in Drupal are.
@@ -217,7 +221,20 @@ function filefield_views_atom_render_field(SimpleXMLElement $field_xml, $field, 
 /**
  * Implementation of hook_views_atom_render().
  */
-function taxonomy_views_atom_render($node, $entity_xml) {
+function taxonomy_views_atom_render($node, $entity_xml, $display = NULL) {
+  $taxonomy_mapping = NULL;
+  if ($display != NULL && get_class($display) == 'views_plugin_row_rdf_node_custom') {
+    $taxonomy_mapping = $display->options['taxonomy_mapping'];
+    $lines = explode('\n', $taxonomy_mapping);
+    $new_labels = array();
+    foreach ($lines as $line) {
+      $tmp = array();
+      $tmp = explode('|', $line);
+      $vid = $tmp[0];
+      $new_labels[$vid] = $tmp[1];
+    }
+  }
+  
   $taxonomy_xml = $entity_xml->addChild('taxonomy');
   foreach ($node->taxonomy as $tid => $term) {
     global $base_url;
@@ -231,7 +248,13 @@ function taxonomy_views_atom_render($node, $entity_xml) {
     $term_xml->addChild('title', $term->name);
     $term_xml->addChild('subject', $term->name);
     $term_xml->addChild('description', views_atom_sanitize($term->description));
-    $term_xml->addChild('vocabulary', $vocabulary->name);
+    $vid = $vocabulary->vid;
+    if (!$new_labels || !$new_labels[$vid]) {
+      $term_xml->addChild('vocabulary', $vocabulary->name);
+    }
+    else {
+      $term_xml->addChild('vocabulary', $new_labels[$vid]);
+    }
   }
 }
 
