@@ -46,35 +46,47 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
     }
     $item = $batch->currentItem();
     $fname = substr($element_key,0,6);
-    if ($fname == 'field_' || in_array($element_key, array('body', 'created', 'changed', 'uid'))) {
-      if ($fname == 'field_') {
-        $type = $item['rdf'][$element_key]['#attributes']['type'];
-        switch ($type) {
-          case 'text':
-            return $item['rdf'][$element_key][0]['value'];
-            break;
-          case 'filefield':
-            return $item['rdf'][$element_key][0]['full_url'];
-            break;
-          case 'email':
-            return $item['rdf'][$element_key][0]['email'];
-            break;
-          default:
-            return '';
-        }
-      } else {
-        if (in_array($element_key, array('created', 'changed'))) {
-          return strtotime($item['rdf'][$element_key]);
-        }
-        elseif ($element_key == 'uid') {
-          $user = user_load(array('mail' => $item['author_email']));
-          return $user->uid;
-        }
-        else {
-          return $item['rdf'][$element_key];
+    if ($fname == 'field_') {
+      $type = $item['rdf'][$element_key]['#attributes']['type'];
+      switch ($type) {
+        case 'text':
+          return $item['rdf'][$element_key][0]['value'];
+          break;
+        case 'filefield':
+          return $item['rdf'][$element_key][0]['full_url'];
+          break;
+        case 'email':
+          return $item['rdf'][$element_key][0]['email'];
+          break;
+        default:
+          return '';
+      }
+    }
+    elseif (in_array($element_key, array('body', 'created', 'changed', 'uid'))) {
+      if (in_array($element_key, array('created', 'changed'))) {
+        return strtotime($item['rdf'][$element_key]);
+      }
+      elseif ($element_key == 'uid') {
+        $user = user_load(array('mail' => $item['author_email']));
+        return $user->uid;
+      }
+      else {
+        return $item['rdf'][$element_key];
+      }
+    }
+    elseif ($fname == 'taxono') { // Taxonomy
+      // Get vocabulary name
+      $tax_array = explode(':', $element_key);
+      $vocabulary = $tax_array[1];
+      $return_array = array();
+      foreach ($item['rdf']['taxonomy'] as $tag) {
+        if ($tag['vocabulary'] == $vocabulary) {
+          $return_array[] = $tag['label'];
         }
       }
-    } else {
+      return $return_array;
+    }
+    else {
       return isset($item[$element_key]) ? $item[$element_key] : '';
     }
   }

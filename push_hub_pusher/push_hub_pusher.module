@@ -227,16 +227,21 @@ function push_hub_pusher_notify($node, $item) {
     $display_arguments[] = $node->$argument_name;
   }
   
-  // Start output buffer
-  ob_start();
-  $view->execute_display($display_name, $display_arguments);
-  $changed = ob_get_contents();
-  ob_end_clean();
-  
   // Get display path
   $path = $display->get_path();
   // First, look if there are subscribers to the topic with the argument
   $topic_path_with_id = url($path.'/'.$display_arguments[0], array('absolute' => TRUE, 'language' => ''));
+  
+  // Fetch changed content
+  // Note: the view could be executed and the content fetched using the commented code below,
+  // however this would not allow the taxonomy to be updated. That's why I'm using file_get_contents
+  // instead of the code below
+  /*ob_start();
+  $view->execute_display($display_name, $display_arguments);
+  $changed = ob_get_contents();
+  ob_end_clean();*/
+  $changed = file_get_contents($topic_path_with_id);
+  
   $subscribers = push_hub()->allSubscribers($topic_path_with_id);
   if (count($subscribers) > 0) {
     // Notify
