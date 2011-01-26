@@ -218,6 +218,19 @@ function filefield_views_atom_render_field(SimpleXMLElement $field_xml, $field, 
   }
 }
 
+function nodereference_views_atom_render_field(SimpleXMLElement $field_xml, $field, $field_type) {
+  // Give the full guid of the node
+  if ($field_type == 'nodereference') {
+    $instances = $field_xml->{'field-instance'};
+    
+    foreach ($field as $i => $instance) {
+      $nid = $instance['nid'];
+      $new_column = $instances[$i]->addChild('column', views_atom_guid('node', $nid));
+      $new_column->addAttribute('name', 'guid');
+    }
+  }
+}
+
 /**
  * Implementation of hook_views_atom_render().
  */

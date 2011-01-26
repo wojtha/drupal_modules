@@ -58,6 +58,20 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
         case 'email':
           return $item['rdf'][$element_key][0]['email'];
           break;
+        case 'nodereference':
+          if ($item['rdf'][$element_key][1]) {
+            $return = array();
+            foreach ($item['rdf'][$element_key] as $elt) {
+              if ($elt['guid']) {
+                $return[] = $elt['guid'];
+              }
+            }
+            return $return;
+          }
+          else {
+            return $item['rdf'][$element_key][0]['guid'];
+          }
+          break;
         default:
           return '';
       }
