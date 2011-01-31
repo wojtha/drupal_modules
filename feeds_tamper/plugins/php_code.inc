@@ -24,10 +24,8 @@ function feeds_tamper_php_code_form($importer, $source, $settings) {
 
 function feeds_tamper_php_code_callback($source, $item_key, $element_key, &$field, $values) {
   // Not using drupal_eval in order to get access to the $field variable in the PHP code being evaluated
-  watchdog('php_code', var_export($field, TRUE));
   ob_start();
   eval('?>' . $values['php_code']);
   ob_end_clean();
-  watchdog('php_code', var_export($field, TRUE));
 }
 
