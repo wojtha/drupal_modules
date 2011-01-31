@@ -295,14 +295,6 @@ function sync_user_subscribe($uid, $url) {
       ));
       $psource->save();
       
-      // Get the feeds tamper attached to the importer and save them for this importer
-      if (module_exists('feeds_tamper')) {
-        $tampers = feeds_tamper_get_attached($profile_importer, 0);
-        if ($tampers) {
-          feeds_tamper_save_attached($profile_importer, $uid, $tampers);
-        }
-      }
-      
       // Import user profile
       $psource->import();
     }

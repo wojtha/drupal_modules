@@ -73,7 +73,12 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
           }
           break;
         default:
-          return '';
+          if ($item['rdf'][$element_key][0]['value']) {
+            return $item['rdf'][$element_key][0]['value'];
+          }
+          else {
+            return '';
+          }
       }
     }
     elseif (in_array($element_key, array('body', 'created', 'changed', 'uid'))) {

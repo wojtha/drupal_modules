@@ -1,0 +1,72 @@
+<?php
+// $Id: feeds_tamper_ui.module,v 1.1.2.1 2011/01/14 05:08:48 twistor Exp $
+
+// Implementation of hook_menu.
+function feeds_tamper_ui_menu() {
+  $items = array();
+
+  $items['admin/build/feeds_tamper'] = array(
+    'title' => 'Feed tamper settings',
+    'description' => 'Configure Feeds tamper to modify incoming feeds data.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('feeds_tamper_ui_overview_form'),
+    'access arguments' => array('administer feeds_tamper'),
+    'file' => 'feeds_tamper_ui.admin.inc',
+  );
+
+  //$items['admin/build/feeds_tamper/list'] = array(
+  //  'title' => t('List'),
+  //  'type' => MENU_DEFAULT_LOCAL_TASK,
+  //);
+  //$items['admin/build/feeds_tamper/export/%feeds_importer'] = array(
+  //  'title' => t('Export'),
+  //  'page callback' => 'drupal_get_form',
+  //  'page arguments' => array('feeds_ui_export_form', 4),
+  //  'access arguments' => array('administer feeds'),
+  //  'file' => 'feeds_ui.admin.inc',
+  //  'type' => MENU_CALLBACK,
+  //);
+
+  $items['admin/build/feeds_tamper/edit/%feeds_importer'] = array(
+    'title' => t('Edit'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('feeds_tamper_ui_edit_form', 4),
+    'access arguments' => array('administer feeds_tamper'),
+    'file' => 'feeds_tamper_ui.admin.inc',
+  );
+  $items['admin/build/feeds_tamper/edit/%feeds_importer/add/%'] = array(
+    'title' => t('Add Plugin'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('feeds_tamper_ui_add_plugin_form', 4, 6),
+    'access arguments' => array('administer feeds_tamper'),
+    'file' => 'feeds_tamper_ui.admin.inc',
+  );
+  $items['admin/build/feeds_tamper/edit_plugin/%feeds_tamper_plugin_instance'] = array(
+    'title callback' => 'feeds_tamper_ui_edit_title',
+    'title arguments' => array(4),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('feeds_tamper_ui_edit_plugin_form', 4),
+    'access arguments' => array('administer feeds_tamper'),
+    'file' => 'feeds_tamper_ui.admin.inc',
+  );
+  $items['admin/build/feeds_tamper/remove_plugin/%feeds_tamper_plugin_instance'] = array(
+    'title callback' => 'feeds_tamper_ui_remove_title',
+    'title arguments' => array(4),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('feeds_tamper_ui_remove_plugin_form', 4),
+    'access arguments' => array('administer feeds_tamper'),
+    'file' => 'feeds_tamper_ui.admin.inc',
+  );
+  return $items;
+}
+
+function feeds_tamper_plugin_instance_load($instance_id) {
+  return feeds_tamper_load_instance($instance_id);
+}
+
+function feeds_tamper_ui_edit_title($instance) {
+  return t('Edit plugin: ') . $instance->id;
+}
+function feeds_tamper_ui_remove_title($instance) {
+  return t('Remove plugin: ') . $instance->id . '?';
+}

@@ -8,6 +8,55 @@ function feeds_atom_ctools_plugin_api($owner, $api) {
   }
 }
 
+/**
+* Implementation of hook_feeds_after_parse().
+*
+* This is needed for feeds_parser. The 
+*/
+function feeds_atom_feeds_after_parse(FeedsImporter $importer, FeedsSource $source) {
+  if (module_exists('feeds_tamper')) {
+    $instances = feeds_tamper_load_by_importer($importer->id);
+    if (empty($instances)) {
+      return;
+    }
+    foreach ($source->batch->items as $item_key => &$item) {
+      foreach ($instances as $element_key => $instances_) {
+        foreach ($instances_ as $instance) {
+          $plugin = feeds_tamper_get_plugin($instance->plugin_id);
+
+          if (is_array($item['rdf'][$element_key]) && $plugin['multi'] == 'loop') {
+            foreach ($item['rdf'][$element_key] as &$i) {
+              $plugin['callback']($source, $item_key, $element_key, $i, $instance->settings);
+            }
+          }
+          
+          else if (is_array($item['rdf'][$element_key]) && $plugin['multi'] == 'direct') {
+            $plugin['callback']($source, $item_key, $element_key, $item['rdf'][$element_key], $instance->settings);
+          }
+          
+          else if (!is_array($item['rdf'][$element_key]) && $plugin['single'] != 'skip') {
+            $plugin['callback']($source, $item_key, $element_key, $item['rdf'][$element_key], $instance->settings);
+          }
+          
+          else if (is_array($item[$element_key]) && $plugin['multi'] == 'loop') {
+            foreach ($item[$element_key] as &$i) {
+              $plugin['callback']($source, $item_key, $element_key, $i, $instance->settings);
+            }
+          }
+
+          else if (is_array($item[$element_key]) && $plugin['multi'] == 'direct') {
+            $plugin['callback']($source, $item_key, $element_key, $item[$element_key], $instance->settings);
+          }
+
+          else if (!is_array($item[$element_key]) && $plugin['single'] != 'skip') {
+            $plugin['callback']($source, $item_key, $element_key, $item[$element_key], $instance->settings);
+          }
+        }
+      }
+    }
+  }
+}
+
 function feeds_atom_feeds_plugins() {
 
   $path = drupal_get_path('module', 'feeds_atom') .'/plugins';

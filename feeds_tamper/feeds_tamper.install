@@ -1,0 +1,77 @@
+<?php
+// $Id: feeds_tamper.install,v 1.3.2.2 2011/01/14 05:06:09 twistor Exp $
+
+/**
+ *  Implementation of hook_install().
+ */
+function feeds_tamper_install() {
+  drupal_install_schema('feeds_tamper');
+}
+
+/**
+ *  Implementation of hook_schema().
+ */
+function feeds_tamper_schema() {
+  $schema = array();
+
+  $schema['feeds_tamper'] = array(
+    'description' => 'Table storing tamper instances.',
+    'export' => array(
+      'key' => 'id',
+      'identifier' => 'feeds_tamper', // Exports will be as $tamper_instalce
+      'default hook' => 'feeds_tamper_default',  // Function hook name.
+      'api' => array(
+        'owner' => 'feeds_tamper',
+        'api' => 'feeds_tamper_default',  // Base name for api include files.
+        'minimum_version' => 2,
+        'current_version' => 2,
+      ),
+    ),
+    'fields' => array(
+      'id' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Id of the feeds tamper instance.',
+      ),
+      'importer' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Id of the feeds importer.',
+      ),
+      'source' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The source field of the importer.',
+      ),
+      'plugin_id' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Id of the tamper plugin.',
+      ),
+      'settings' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'description' => 'A serialized array of options for a Feeds Tamper plugin.',
+        'serialize' => TRUE,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  return $schema;
+}
+
+/**
+ *  Implementation of hook_uninstall().
+ */
+function feeds_tamper_uninstall() {
+  drupal_uninstall_schema('feeds_tamper');
+}

@@ -1,0 +1,211 @@
+<?php
+// $Id: feeds_tamper.module,v 1.5.2.11 2011/01/14 05:06:09 twistor Exp $
+
+/**
+ * Feeds related api hooks.
+ */
+
+/**
+* Implementation of hook_feeds_after_parse().
+*
+* This is the meat of the whole deal.  After every Feeds run, before going into
+* processing, this gets called and modifies the data based on the configuration.
+*/
+function feeds_tamper_feeds_after_parse(FeedsImporter $importer, FeedsSource $source) {
+  $instances = feeds_tamper_load_by_importer($importer->id);
+  if (empty($instances)) {
+    return;
+  }
+  foreach ($source->batch->items as $item_key => &$item) {
+    foreach ($instances as $element_key => $instances_) {
+      foreach ($instances_ as $instance) {
+        $plugin = feeds_tamper_get_plugin($instance->plugin_id);
+
+        if (is_array($item[$element_key]) && $plugin['multi'] == 'loop') {
+          foreach ($item[$element_key] as &$i) {
+            $plugin['callback']($source, $item_key, $element_key, $i, $instance->settings);
+          }
+        }
+
+        else if (is_array($item[$element_key]) && $plugin['multi'] == 'direct') {
+          $plugin['callback']($source, $item_key, $element_key, $item[$element_key], $instance->settings);
+        }
+
+        else if (!is_array($item[$element_key]) && $plugin['single'] != 'skip') {
+          $plugin['callback']($source, $item_key, $element_key, $item[$element_key], $instance->settings);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_feeds_node_processor_targets_alter().
+ *
+ * @see FeedsNodeProcessor::getMappingTargets().
+ */
+function feeds_tamper_feeds_node_processor_targets_alter(&$targets, $content_type) {
+  $targets['feeds_tamper_store'] = array(
+    'name' => 'Rewrite Store',
+    'description' => t('A field that stores the source data temporarily so that it can be used with the Feeds Tamper rewrite plugin.'),
+  );
+  $targets['feeds_tamper_node_reference'] = array(
+    'name' => t('Tamper Reference (Experimental)'),
+    'description' => t('An experimental target that creates node references. Currently only references from GUID to GUID\'s are supported.'),
+    'callback' => 'feeds_tamper_node_reference_callback',
+  );
+}
+
+/**
+ * Callback for feeds_tamper_feeds_node_processor_targets_alter().
+ */
+function feeds_tamper_node_reference_callback($node, $target_element, $value) {
+  $store = variable_get('feeds_tamper_node_references', array());
+  $importer_id = $node->feeds_node_item->id;
+  $feed_nid = $node->feeds_node_item->feed_nid;
+  $guid = $node->feeds_node_item->guid;
+
+  if (!isset($store[$importer_id])) {
+    $store[$importer_id] = array();
+    $store[$importer_id][$feed_nid] = array();
+  }
+
+  if (!is_array($value)) {
+    $value = array($value);
+  }
+  $store[$importer_id][$feed_nid][$guid] = $value;
+  variable_set('feeds_tamper_node_references', $store);
+}
+
+/**
+* Implementation of hook_feeds_after_import().
+*/
+function feeds_tamper_feeds_after_import(FeedsImporter $importer, FeedsSource $source) {
+  $store = variable_get('feeds_tamper_node_references', array());
+  /*foreach ($store[$importer->id][$source->feed_nid] as $guid => $references) {
+    $query_s = "SELECT nid from {feeds_node_item} WHERE guid = '%s'";
+    $node = node_load(db_fetch_object(db_query($query_s, $guid))->nid);
+    $i = 0;
+    foreach ($references as $ref) {
+      $nid = db_fetch_object(db_query($query_s, $ref))->nid;
+      $node->field_ref[$i]['nid'] = $nid;
+      $i++;
+    }
+    node_save($node);
+  }*/
+  variable_del('feeds_tamper_node_references');
+}
+
+/**
+ * Feeds Tamper api functions.
+ */
+
+/**
+ * Load all modifiers.
+ */
+function feeds_tamper_load_all_instances($load_disabled = FALSE) {
+  $instances = array();
+  if (function_exists('ctools_include')) {
+    ctools_include('export');
+    $configs = ctools_export_load_object('feeds_tamper', 'all');
+    foreach ($configs as $instance_id => $config) {
+      if (!empty($config->id) && ($load_disabled || empty($config->disabled))) {
+        $instances[$instance_id] = $config;
+      }
+    }
+  }
+  return $instances;
+}
+
+/**
+ * Load a plugin instance by id.
+ */
+function feeds_tamper_load_instance($id) {
+  ctools_include('export');
+  $t = ctools_export_load_object('feeds_tamper', 'names', array($id));
+  return $t[$id];
+}
+
+function feeds_tamper_load_by_importer($importer_id) {
+  $query = "Select * from {feeds_tamper} WHERE importer = '%s'";
+  $query = db_query($query, $importer_id);
+  $return = array();
+  while ($result = db_fetch_object($query)) {
+    $result->settings = unserialize($result->settings);
+    if (!isset($return[$result->source])) {
+      $return[$result->source] = array();
+    }
+    array_unshift($return[$result->source], $result);
+  }
+  return $return;
+}
+
+/**
+ * Gets all available plugins.
+ *
+ * @return
+ *   An array where the keys are the plugin keys and the values
+ *   are the plugin info arrays as defined in hook_feeds_tamper_plugins().
+ */
+function feeds_tamper_get_plugins() {
+  ctools_include('plugins');
+  return ctools_get_plugins('feeds_tamper', 'plugins');
+}
+
+/**
+ * Gets a single plugin.
+ *
+ *  @param $id
+ *    The id of a plugin.
+ *
+ * @return
+ *   An array where the keys are the plugin keys and the values
+ *   are the plugin info arrays as defined in hook_feeds_tamper_plugins().
+ */
+function feeds_tamper_get_plugin($id) {
+  ctools_include('plugins');
+  return ctools_get_plugins('feeds_tamper', 'plugins', $id);
+}
+
+/**
+ * CTools stuff.
+ */
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ */
+function feeds_tamper_ctools_plugin_api($owner, $api) {
+  if ($owner == 'feeds_tamper') {
+    return array('version' => 2);
+  }
+}
+
+/**
+* Implementation of hook_ctools_plugin_directory().
+*/
+function feeds_tamper_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'feeds_tamper') {
+    return 'plugins/';
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_plugins().
+ *
+ * Psuedo hook defintion plugin system options and defaults.
+ *
+ * @todo
+ *   Enable caching once things are stable.
+ */
+function feeds_tamper_ctools_plugin_plugins() {
+  return array(
+    'cache' => FALSE,
+    'use hook' => FALSE,
+    'defaults' => array(
+      'validate' => FALSE,
+      'multi' => FALSE,
+      'allowed' => FALSE,
+      'category' => 'Other',
+    ),
+  );
+}

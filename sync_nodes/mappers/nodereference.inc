@@ -17,11 +17,13 @@ function nodereference_feeds_node_processor_targets_alter(&$targets, $content_ty
   $fields = array();
   if (isset($info['fields']) && count($info['fields'])) {
     foreach ($info['fields'] as $k => $field) {
-      $targets[$k] = array(
-        'name' => $field['widget']['label'],
-        'callback' => 'nodereference_feeds_set_target',
-        'description' => t('The CCK !name field of the node.', array('!name' => $field['widget']['label'])),
-      );
+      if ($field['type'] == 'nodereference') {
+        $targets[$k] = array(
+          'name' => $field['widget']['label'],
+          'callback' => 'nodereference_feeds_set_target',
+          'description' => t('The CCK !name field of the node.', array('!name' => $field['widget']['label'])),
+        );
+      }
     }
   }
 }
