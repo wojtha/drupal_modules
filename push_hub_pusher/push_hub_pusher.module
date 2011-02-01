@@ -30,15 +30,33 @@ function push_hub_pusher_menu() {
 function push_hub_pusher_configuration_page() {
   $out = drupal_get_form('push_hub_pusher_configuration_form');
   $list = push_hub_pusher_get_list();
-  $headers = array(t('Content type'), t('View'), t('Insert'), t('Update'), t('Delete'), t('Browser batching'), '');
+  if (module_exists('keyauth')) {
+    keyauth_include();
+    $headers = array(t('Content type'), t('View'), t('Insert'), t('Update'), t('Delete'), t('Browser batching'), t('Key authentication'), '');
+  }
+  else {
+    $headers = array(t('Content type'), t('View'), t('Insert'), t('Update'), t('Delete'), t('Browser batching'), '');
+  }
   $rows = array();
   foreach ($list as $item) {
-    $rows[] = array($item->content_type, $item->view, 
-      drupal_get_form('push_hub_pusher_checkbox', $item->content_insert), 
-      drupal_get_form('push_hub_pusher_checkbox', $item->content_update), 
-      drupal_get_form('push_hub_pusher_checkbox', $item->content_delete), 
-      drupal_get_form('push_hub_pusher_checkbox', $item->browser_batch),
-      drupal_get_form('push_hub_pusher_remove_form', $item->pid));
+    if (module_exists('keyauth')) {
+      $key = keyauth_load($item->keyauth);
+      $rows[] = array($item->content_type, $item->view, 
+        drupal_get_form('push_hub_pusher_checkbox', $item->content_insert), 
+        drupal_get_form('push_hub_pusher_checkbox', $item->content_update), 
+        drupal_get_form('push_hub_pusher_checkbox', $item->content_delete), 
+        drupal_get_form('push_hub_pusher_checkbox', $item->browser_batch),
+        $key['title'],
+        drupal_get_form('push_hub_pusher_remove_form', $item->pid));
+    }
+    else {
+      $rows[] = array($item->content_type, $item->view, 
+        drupal_get_form('push_hub_pusher_checkbox', $item->content_insert), 
+        drupal_get_form('push_hub_pusher_checkbox', $item->content_update), 
+        drupal_get_form('push_hub_pusher_checkbox', $item->content_delete), 
+        drupal_get_form('push_hub_pusher_checkbox', $item->browser_batch),
+        drupal_get_form('push_hub_pusher_remove_form', $item->pid));
+    }
   }
   $out .= theme('table', $headers, $rows);
   return $out;
@@ -97,6 +115,25 @@ function push_hub_pusher_configuration_form() {
     '#title' => 'Use browser batching'
   );
   
+  if (module_exists('keyauth')) {
+    keyauth_include();
+    $keys = keyauth_all_keys();
+    $options = array();
+    foreach ($keys as $pub => $key) {
+      $options[$pub] = $key['title'];
+    }
+    $form['keyauth'] = array(
+      '#type' => 'checkbox',
+      '#title' => 'Use key authentication'
+    );
+    
+    $form['keyauth_key'] = array(
+      '#type' => 'select',
+      '#options' => $options,
+      '#title' => 'Key to use'
+    );
+  }
+  
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => 'Submit'
@@ -108,7 +145,11 @@ function push_hub_pusher_configuration_form() {
 function push_hub_pusher_configuration_form_submit($form, &$form_state) {
   $type = $form['type']['#value'];
   $view = $form['view']['#value'];
-  push_hub_pusher_write($type, $view, $form['content_insert']['#value'], $form['content_update']['#value'], $form['content_delete']['#value'], $form['browser_batch']['#value']);
+  $key = '';
+  if ($form['keyauth'] && !empty($form['keyauth']['#value'])) {
+    $key = $form['keyauth_key']['#value'];
+  }
+  push_hub_pusher_write($type, $view, $form['content_insert']['#value'], $form['content_update']['#value'], $form['content_delete']['#value'], $form['browser_batch']['#value'], $key);
 }
 
 function push_hub_pusher_remove_form($form_state, $pid) {
@@ -153,7 +194,7 @@ function push_hub_pusher_remove($pid) {
 /**
  * Adds a content type associated to a view in the database
  */
-function push_hub_pusher_write($type, $view, $insert, $update, $delete, $browser_batch) {
+function push_hub_pusher_write($type, $view, $insert, $update, $delete, $browser_batch, $key = '') {
   $sql = "SELECT COUNT(*) AS number FROM {push_hub_pusher} WHERE content_type = '%s' AND view = '%s' AND content_insert = %d AND content_update = %d AND content_delete = %d";
   $result = db_query($sql, $type, $view, $insert, $update, $delete);
   if ($result->number > 0) {
@@ -167,6 +208,7 @@ function push_hub_pusher_write($type, $view, $insert, $update, $delete, $browser
     $item->content_update = $update;
     $item->content_delete = $delete;
     $item->browser_batch = $browser_batch;
+    $item->keyauth = $key;
     drupal_write_record('push_hub_pusher', $item);
   }
 }
@@ -234,6 +276,12 @@ function push_hub_pusher_notify($node, $item, $op) {
   // First, look if there are subscribers to the topic with the argument
   $topic_path_with_id = url($path.'/'.$display_arguments[0], array('absolute' => TRUE, 'language' => ''));
   
+  // Key authentication
+  $key = '';
+  if (module_exists('keyauth') && !empty($item->keyauth)) {
+    keyauth_include();
+    $key = $item->keyauth;
+  }
   
   // Fetch changed content
   // Note: the view could be executed and the content fetched using the commented code below,
@@ -243,7 +291,13 @@ function push_hub_pusher_notify($node, $item, $op) {
   $view->execute_display($display_name, $display_arguments);
   $changed = ob_get_contents();
   ob_end_clean();*/
-  $changed = file_get_contents($topic_path_with_id);
+  
+  $url = $topic_path_with_id;
+  if (!empty($key)) {
+    // Retrieve content using key authentication
+    $url = keyauth_sign_url($key, $url);
+    $changed = file_get_contents($url);
+  }
   
   $subscribers = push_hub()->allSubscribers($topic_path_with_id);
   if (count($subscribers) > 0) {

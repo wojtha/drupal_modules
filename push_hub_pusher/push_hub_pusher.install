@@ -88,6 +88,13 @@ function push_hub_pusher_schema() {
         'size' => 'tiny',
         'description' => 'Use browser batching'
       ),
+      'keyauth' => array(
+        'description' => 'The public key to be used if using keyauth URL signing.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => ''
+      ),
     ),
     'primary key' => array('pid')
   );
