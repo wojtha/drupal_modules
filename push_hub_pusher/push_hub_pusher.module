@@ -195,7 +195,6 @@ function push_hub_pusher_nodeapi($node, $op) {
     foreach ($list as $item) {
       $var_name = 'content_'.$op;
       if ($node->type == $item->content_type && $item->$var_name == TRUE) {
-        watchdog('push_hub_pusher', 'guid: '.var_export(views_atom_guid('node', $node->nid), TRUE));
         push_hub_pusher_notify($node, $item, $op);
       }
     }

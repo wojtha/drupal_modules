@@ -106,3 +106,29 @@ function keyauth_feeds_plugins() {
 function keyauth_include() {
   module_load_include('inc', 'keyauth');
 }
+
+/**
+ * Implementation of hook_views_plugins()
+ */
+function keyauth_views_plugins() {
+  $path = drupal_get_path('module', 'keyauth');
+  $plugins = array(
+    'access' => array(
+      'keyauth' => array(
+        'title' => t('Key authentication'),
+        'help' => t('Access will be granted based on a key authentication'),
+        'handler' => 'views_plugin_access_keyauth',
+        'uses options' => TRUE
+      )
+    )
+  );
+  return $plugins;
+}
+
+/**
+ * Views access callback
+ */
+function keyauth_views_access() {
+  keyauth_include();
+  return keyauth_verify_url($_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
+}
