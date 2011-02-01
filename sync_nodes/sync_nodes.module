@@ -23,6 +23,18 @@ function sync_nodes_feeds_plugins() {
       'path' => $path
     )
   );
+  
+  $info['SyncNodesDeleteProcessor'] = array(
+    'name' => 'Synchronized Nodes Delete Processor',
+    'description' => 'Delete synchronized nodes between Drupal sites.',
+    'help' => 'Delete synchronized nodes between Drupal sites from content parsed.',
+    'handler' => array(
+      'parent' => 'FeedsNodeProcessor',
+      'class' => 'SyncNodesDeleteProcessor',
+      'file' => 'SyncNodesDeleteProcessor.inc',
+      'path' => $path
+    )
+  );
       
 	return $info;
 }

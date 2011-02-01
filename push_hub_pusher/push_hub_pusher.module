@@ -195,7 +195,8 @@ function push_hub_pusher_nodeapi($node, $op) {
     foreach ($list as $item) {
       $var_name = 'content_'.$op;
       if ($node->type == $item->content_type && $item->$var_name == TRUE) {
-        push_hub_pusher_notify($node, $item);
+        watchdog('push_hub_pusher', 'guid: '.var_export(views_atom_guid('node', $node->nid), TRUE));
+        push_hub_pusher_notify($node, $item, $op);
       }
     }
   }
@@ -204,12 +205,14 @@ function push_hub_pusher_nodeapi($node, $op) {
 /**
  * Notifies the subscribers that new content has been pushed
  */
-function push_hub_pusher_notify($node, $item) {
+function push_hub_pusher_notify($node, $item, $op) {
   $view_full_name = $item->view;
   $batch = $item->browser_batch;
   $nid = $node->nid;
-  // Reset the internal cache
-  $node = node_load(array('nid' => $nid), NULL, TRUE);
+  if ($op != 'delete') {
+    // Reset the internal cache
+    $node = node_load(array('nid' => $nid), NULL, TRUE);
+  }
   $view_name = strstr($view_full_name, '::', TRUE);
   $display_name = strstr($view_full_name, '::');
   $display_name = substr($display_name, 2);
@@ -231,6 +234,7 @@ function push_hub_pusher_notify($node, $item) {
   $path = $display->get_path();
   // First, look if there are subscribers to the topic with the argument
   $topic_path_with_id = url($path.'/'.$display_arguments[0], array('absolute' => TRUE, 'language' => ''));
+  
   
   // Fetch changed content
   // Note: the view could be executed and the content fetched using the commented code below,

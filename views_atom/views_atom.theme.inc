@@ -73,6 +73,21 @@ function template_preprocess_views_view_views_atom_delete(&$vars) {
   $vars['updated'] = $now;
 
   $vars['items'] = array();
+  
+  // @todo Find a way to fix this really dirty hack !!!!
+  if (empty($vars['rows'])) {
+    $i = 0;
+    while (arg($i) != '') {
+      if (is_numeric(arg($i))) {
+        $nid = arg($i);
+        $node = new stdClass();
+        $node->nid = $nid;
+        $vars['rows'][0] = $node;
+        break;
+      }
+      $i++;
+    }
+  }
 
   // Now process the rows into deletion information.
   foreach ($vars['rows'] as $i => $row) {

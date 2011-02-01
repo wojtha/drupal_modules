@@ -92,7 +92,7 @@ function views_atom_guid($entity_type, $entity_id) {
   $guid = url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE), 'language' => ''));
   // See if there already exists a guid for this node
   if ($entity_type == 'node' && module_exists('feeds')) {
-    if ($result = db_fetch_object(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = '%s'", $entity_id))) {
+    if ($result = db_fetch_object(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = %d", $entity_id))) {
       $guid = $result->guid;
     }
   }
