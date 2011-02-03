@@ -1,5 +1,5 @@
 <?php
-// $Id: views_atom.views.inc,v 1.1 2010/09/21 21:36:52 crell Exp $
+// $Id: views_atom.views.inc,v 1.1.2.1 2010/12/31 22:07:37 hefox Exp $
 
 /**
  * @file
@@ -36,7 +36,7 @@ function views_atom_views_plugins() {
     'path' => drupal_get_path('module', 'views_atom'),
     'uses row plugin' => FALSE,
     'uses fields' => FALSE,
-    'uses options' => FALSE,
+    'uses options' => TRUE,
     'uses grouping' => FALSE,
     'type' => 'feed',
   );

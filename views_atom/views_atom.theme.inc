@@ -1,5 +1,5 @@
 <?php
-// $Id: views_atom.theme.inc,v 1.1 2010/09/21 21:36:52 crell Exp $
+// $Id: views_atom.theme.inc,v 1.1.2.4 2010/12/31 22:07:37 hefox Exp $
 
 
 function template_preprocess_views_view_views_atom(&$vars) {
@@ -7,14 +7,14 @@ function template_preprocess_views_view_views_atom(&$vars) {
   $options = $view->style_options;
 
   // Set basic info about the feed.
-  $vars['view_title'] = variable_get('site_name', array()) . ' | ' . $view->get_title();
+  $vars['view_title'] = variable_get('site_name', 'Drupal') . ' | ' . $view->get_title();
   $vars['description'] = ($options['description']['feed_description']) ? $options['description']['feed_description'] :  variable_get('site_mission', '');
 
   // Base URL for link tag
   global $base_url;
   $vars['link'] = $base_url;
 
-  $vars['site_name'] = variable_get('site_name', '');
+  $vars['site_name'] = variable_get('site_name', 'Drupal');
 
 
   // If the push_hub module is enabled, we want to enable PuSH functionality
@@ -45,9 +45,10 @@ function template_preprocess_views_view_views_atom_fields(&$vars) {
 
     // We need to know the updated time of the most recently updated entry
     // so that we can set the whole feed's updated time to that.
-    $alias = $view->field[$options['fields']['atom_updated']]->field_alias;
-    $updated = max($item->$alias, $updated);
-
+    if (!empty($options['fields']['atom_updated']) && !empty($view->field[$options['fields']['atom_updated']])) {
+      $alias = $view->field[$options['fields']['atom_updated']]->field_alias;
+      $updated = max($item->$alias, $updated);
+    }
     $vars['content'] .= theme('views_atom_fields_item', $content, $view, $item);
   }
 
@@ -88,11 +89,12 @@ function template_preprocess_views_view_views_atom_delete(&$vars) {
       $i++;
     }
   }
-
+  
+  $guid_options = isset($vars['view']->style_options['guid']) ? $vars['view']->style_options['guid'] : array();
   // Now process the rows into deletion information.
   foreach ($vars['rows'] as $i => $row) {
     $item = array(
-      'guid' => views_atom_guid('node', $row->nid),
+      'guid' => views_atom_guid('node', $row->nid, $guid_options),
       'when' => $now,
       'by' => array(
         'name' => '',
@@ -125,28 +127,34 @@ function template_preprocess_views_atom_fields_item(&$vars) {
 
   $vars['entry_type'] = ($options['entry_type'] == 'xml') ? $options['entry_type_custom'] : $options['entry_type'];
 
+  $nid_alias = isset($view->field['nid']) ? $view->field['nid']->field_alias : 'nid';
+  
   // Figure out which results go with the row we're working with.
   foreach ($view->result as $key => $result) {
-    if ($result->nid == $item->nid) {
+    if ($result->{$nid_alias} == $item->{$nid_alias}) {
       $result_id = $key;
     }
   }
 
   foreach ($options['fields'] as $field => $column) {
-    if (!empty($view->style_plugin->rendered_fields[$result_id][$column])) {
+    $alias = $view->field[$column]->field_alias;
+    if (!empty($item->$alias)) {
+      $vars[$field] = filter_xss_admin($item->$alias);
+    }
+    else if (!empty($view->style_plugin->rendered_fields[$result_id][$column])) {
       $vars[$field] = filter_xss_admin($view->style_plugin->rendered_fields[$result_id][$column]);
     } else {
       $vars[$field] = '';
     }
   }
-
-  $vars['atom_uuid'] = views_atom_guid('node', $item->nid);
+  $guid_options = isset($view->style_options['guid']) ? $view->style_options['guid'] : array();
+  $vars['atom_uuid'] = views_atom_guid('node', $item->{$nid_alias}, $guid_options);
 
   if (empty($vars['atom_url'])) {
     // If the user did not set up an atom_url in the view, set a default.
     // In contrast to what views_atom_guid() currently provides, this URL
     // includes the path alias and possible associated PURL.
-    $vars['atom_url'] = url('node/'. $item->nid, array('absolute' => TRUE));
+    $vars['atom_url'] = url('node/'. $item->{$nid_alias}, array('absolute' => TRUE));
   }
   if ($vars['atom_published']) {
     // format_date() doesn't support the 'c' formatting code.

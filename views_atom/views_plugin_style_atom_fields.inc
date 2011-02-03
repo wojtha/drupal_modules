@@ -1,5 +1,5 @@
 <?php
-// $Id: views_plugin_style_atom_fields.inc,v 1.1 2010/09/21 21:36:52 crell Exp $
+// $Id: views_plugin_style_atom_fields.inc,v 1.1.2.3 2010/12/31 22:07:37 hefox Exp $
 
 /**
  * @file
@@ -35,6 +35,10 @@ class views_plugin_style_atom_fields extends views_plugin_style {
     $options['entry_type'] = array('default' => 'text');
     $options['entry_type_custom'] = array('default' => '');
     $options['description']['feed_description'] = array('default' => '');
+    $options['fields'] = array('default' => array());
+    $options['guid'] = array(
+      'use_feed' => array('default' => array()), 
+    );
 
     return $options;
   }
@@ -97,35 +101,96 @@ class views_plugin_style_atom_fields extends views_plugin_style {
         }
       }
 
-      $field_options = array(
-        'atom_title' => t('Title'),
-        'atom_summary' => t('Summary'),
-        'atom_url' => t('URL'),
-        'atom_updated' => t('Updated'),
-        'atom_published' => t('Published'),
-        'atom_author' => t('Author Name'),
-        'atom_author_email' => t('Author Email'),
-        'atom_author_url' => t('Author URL'),
-      );
+      $field_options = $this->atom_mapping_fields();
 
       $form['fields'] = array(
         '#type' => 'fieldset',
         '#title' => t('Field usage'),
-        '#description' => t('Atom requires certain elements have values. Specify which fields should be used to populate each required field. Note that all fields will still be available to the content of the record.'),
+        '#description' => t('Atom needs certain elements have values. Specify which fields should be used to populate each field. Note that all fields will still be available to the content of the record.'),
         '#collapsible' => TRUE,
         '#collapsed' => TRUE,
       );
       foreach ($field_options as $k => $v) {
         $form['fields'][$k] = array(
           '#type' => 'select',
-          '#title' => $v,
+          '#title' => $v['label'],
           '#options' => $field_names,
           '#default_value' => $this->options['fields'][$k],
         );
       }
+      // Feed Description
+      $form['guid'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('GUID settings'),
+        '#description' => t('Controls how the GUID is created.'),
+        '#collapsible' => TRUE,
+        '#collapsed' => TRUE,
+      );
+      if (module_exists('feeds')) {
+        $form['guid']['use_existing_from_feed'] = array(
+          '#title' => t('Use existing GUID when available'),
+          '#type' => 'checkbox',
+          '#default_value' => !empty($this->options['guid']['use_existing_from_feed']),
+          '#description' => t('If the node was imported into the site from another feed, use the original GUID.'),
+        );
+      }
+      $form['guid']['#access'] = count(element_children($form['guid'])) ? TRUE : FALSE;
     }
   }
 
+  /**
+   * Keep track of what fields are mapped for reuse.
+   */
+  function atom_mapping_fields() {
+    return array(
+      'atom_title' => array(
+        'label' => t('Title'),
+        'required' => TRUE,
+      ),
+      'atom_summary' =>  array(
+        'label' => t('Summary'),
+      ),
+      'atom_url' =>  array(
+        'label' => t('URL'),
+        'required' => TRUE,
+      ),
+      'atom_updated' =>  array(
+        'label' => t('Updated'),
+        'required' => TRUE,
+      ),
+      'atom_published' =>  array(
+        'label' => t('Published'),
+      ),
+      'atom_author' =>  array(
+        'label' => t('Author Name'),
+      ),
+      'atom_author_email' =>  array(
+        'label' => t('Author Email'),
+      ),
+      'atom_author_url' =>  array(
+        'label' => t('Author URL'),
+      ),
+    );
+  }
+
+  /**
+   * Validate that the feed has all needed fields for atom to function.
+   */
+  function validate() {
+    $errors = array();
+    $fields = $this->display->handler->get_handlers('field');
+    $missing_fields = array();
+    foreach ($this->atom_mapping_fields() as $field_key => $info) {
+      if (!empty($info['required']) && (empty($this->options['fields'][$field_key]) || empty($fields[$this->options['fields'][$field_key]]))) {
+        $missing_fields[] = $info['label'];
+      }
+    }
+    if (!empty($missing_fields)) {
+      $errors[] = t('Display "@display" is missing required atom fields: @fields.', array('@display' => $this->display->display_title, '@fields' => implode(', ', $missing_fields)));
+    }
+    return $errors;
+  }
+  
   function map_rows($rows) {
     // Fields must be rendered in order as of Views 2.3, so we will pre-render everything.
     $renders = array();
