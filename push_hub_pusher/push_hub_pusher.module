@@ -296,8 +296,8 @@ function push_hub_pusher_notify($node, $item, $op) {
   if (!empty($key)) {
     // Retrieve content using key authentication
     $url = keyauth_sign_url($key, $url);
-    $changed = file_get_contents($url);
   }
+  $changed = file_get_contents($url);
   
   $subscribers = push_hub()->allSubscribers($topic_path_with_id);
   if (count($subscribers) > 0) {
