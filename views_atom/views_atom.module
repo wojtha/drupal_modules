@@ -94,7 +94,7 @@ function views_atom_guid($entity_type, $entity_id, $options = array()) {
   $guid = url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE), 'language' => ''));
 
   // See if there already exists a guid for this node if configured to.
-  if (!empty($options['use_existing_from_feeds']) && $entity_type == 'node' && module_exists('feeds')) {
+  if (!empty($options['use_existing_from_feed']) && $entity_type == 'node' && module_exists('feeds')) {
     $temp_guid = db_result(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = '%s'", $entity_id));
     if ($temp_guid) {
       $guid = $temp_guid;
@@ -229,7 +229,7 @@ function nodereference_views_atom_render_field(SimpleXMLElement $field_xml, $fie
     
     foreach ($field as $i => $instance) {
       $nid = $instance['nid'];
-      $new_column = $instances[$i]->addChild('column', views_atom_guid('node', $nid));
+      $new_column = $instances[$i]->addChild('column', views_atom_guid('node', $nid, array('use_existing_from_feed' => 1)));
       $new_column->addAttribute('name', 'guid');
     }
   }

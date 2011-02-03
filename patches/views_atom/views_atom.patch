@@ -98,7 +98,7 @@ diff -u -p -r1.1.2.1 views_atom.module
 +    
 +    foreach ($field as $i => $instance) {
 +      $nid = $instance['nid'];
-+      $new_column = $instances[$i]->addChild('column', views_atom_guid('node', $nid));
++      $new_column = $instances[$i]->addChild('column', views_atom_guid('node', $nid, array('use_existing_from_feed' => 1)));
 +      $new_column->addAttribute('name', 'guid');
 +    }
 +  }
