@@ -11,7 +11,8 @@ function feeds_atom_ctools_plugin_api($owner, $api) {
 /**
 * Implementation of hook_feeds_after_parse().
 *
-* This is needed for feeds_parser. The 
+* This is needed for feeds_tamper. It allows feeds_tamper to execute its plugins on a
+* feeds_atom feed importer.
 */
 function feeds_atom_feeds_after_parse(FeedsImporter $importer, FeedsSource $source) {
   if (module_exists('feeds_tamper')) {
