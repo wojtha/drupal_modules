@@ -2,41 +2,29 @@
 Index: views_atom.module
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.module,v
-retrieving revision 1.1
-diff -u -p -r1.1 views_atom.module
---- views_atom.module	21 Sep 2010 21:36:52 -0000	1.1
-+++ views_atom.module	19 Nov 2010 19:33:58 -0000
-@@ -89,7 +89,14 @@ function views_atom_get_feed_displays() 
- function views_atom_guid($entity_type, $entity_id) {
-   // This is currently set to the absolute system path until a better UUID
-   // system can be implemented
--  return url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE)));
-+  $guid = url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE), 'language' => ''));
-+  // See if there already exists a guid for this node
-+  if ($entity_type == 'node' && module_exists('feeds')) {
-+    if ($result = db_fetch_object(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = '%s'", $entity_id))) {
-+      $guid = $result->guid;
-+    }
-+  }
-+  return $guid;
- }
- 
- /**
-@@ -130,7 +137,7 @@ function views_atom_sanitize($string) {
+retrieving revision 1.1.2.1
+diff -u -p -r1.1.2.1 views_atom.module
+--- views_atom.module	31 Dec 2010 22:07:37 -0000	1.1.2.1
++++ views_atom.module	3 Feb 2011 11:11:35 -0000
+@@ -141,7 +141,11 @@ function views_atom_sanitize($string) {
  /**
   * Implementation of hook_views_atom_render().
   */
 -function content_views_atom_render($node, $entity_xml) {
-+function content_views_atom_render($node, $entity_xml, $view = NULL) {
++function content_views_atom_render($node, $entity_xml, $display = NULL) {
++  $view = NULL;
++  if ($display != NULL) {
++    $view = $display->view;
++  }
    // If there are any Fields associated with this entity, those each get
    // added via a <field> element.  Each <field> element is assumed to be
    // multi-value, just as Fields in Drupal are.
-@@ -138,30 +145,56 @@ function content_views_atom_render($node
+@@ -149,25 +153,51 @@ function content_views_atom_render($node
    // This is totally the wrong way to do it, but CCK's API is too convoluted
    // for me to figure out something else right now.
    $result = db_query("SELECT field_name, type FROM {content_node_field}");
 +  
-+  // If $view != NULL, only show fields that are in the view
++   // If $view != NULL, only show fields that are in the view
 +  if ($view != NULL) {
 +		$full_keys = array();
 +		$keys = array_keys($view->field);
@@ -48,7 +36,6 @@ diff -u -p -r1.1 views_atom.module
 +			$full_keys[$key] = $view_id;
 +		}
 +	}
-+
  
    while ($record = db_fetch_object($result)) {
      if (!empty($node->{$record->field_name})) {
@@ -83,7 +70,7 @@ diff -u -p -r1.1 views_atom.module
 +        $field = array_filter($node->{$record->field_name});
 +        $field_xml = $entity_xml->addChild('field');
 +        $field_xml->addAttribute('type', $record->type);
-+        $field_xml->addAttribute('name', $label);
++        $field_xml->addAttribute('name', $record->field_name);
 +        foreach ($field as $instance) {
 +          $field_instance_xml = $field_xml->addChild('field-instance');
 +          foreach ($instance as $column => $value) {
@@ -99,40 +86,64 @@ diff -u -p -r1.1 views_atom.module
 +            }
            }
          }
-+        module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
        }
--
--      module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
-     }
+@@ -192,6 +222,19 @@ function filefield_views_atom_render_fie
    }
  }
+ 
++function nodereference_views_atom_render_field(SimpleXMLElement $field_xml, $field, $field_type) {
++  // Give the full guid of the node
++  if ($field_type == 'nodereference') {
++    $instances = $field_xml->{'field-instance'};
++    
++    foreach ($field as $i => $instance) {
++      $nid = $instance['nid'];
++      $new_column = $instances[$i]->addChild('column', views_atom_guid('node', $nid));
++      $new_column->addAttribute('name', 'guid');
++    }
++  }
++}
++
+ /**
+  * Implementation of hook_views_atom_render().
+  */
 Index: views_atom.theme.inc
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.theme.inc,v
-retrieving revision 1.1
-diff -u -p -r1.1 views_atom.theme.inc
---- views_atom.theme.inc	21 Sep 2010 21:36:52 -0000	1.1
-+++ views_atom.theme.inc	19 Nov 2010 19:33:58 -0000
-@@ -118,11 +118,7 @@ function template_preprocess_views_atom_
-   }
+retrieving revision 1.1.2.4
+diff -u -p -r1.1.2.4 views_atom.theme.inc
+--- views_atom.theme.inc	31 Dec 2010 22:07:37 -0000	1.1.2.4
++++ views_atom.theme.inc	3 Feb 2011 11:11:35 -0000
+@@ -74,6 +74,22 @@ function template_preprocess_views_view_
+   $vars['updated'] = $now;
  
-   foreach ($options['fields'] as $field => $column) {
--    $alias = $view->field[$column]->field_alias;
--    if (!empty($item->$alias)) {
--      $vars[$field] = filter_xss_admin($item->$alias);
--    }
--    else if (!empty($view->style_plugin->rendered_fields[$result_id][$column])) {
-+    if (!empty($view->style_plugin->rendered_fields[$result_id][$column])) {
-       $vars[$field] = filter_xss_admin($view->style_plugin->rendered_fields[$result_id][$column]);
-     } else {
-       $vars[$field] = '';
+   $vars['items'] = array();
++  
++  // @todo Find a way to fix this really dirty hack !!!!
++  if (empty($vars['rows'])) {
++    $i = 0;
++    while (arg($i) != '') {
++      if (is_numeric(arg($i))) {
++        $nid = arg($i);
++        $node = new stdClass();
++        $node->nid = $nid;
++        $vars['rows'][0] = $node;
++        break;
++      }
++      $i++;
++    }
++  }
++  
+   $guid_options = isset($vars['view']->style_options['guid']) ? $vars['view']->style_options['guid'] : array();
+   // Now process the rows into deletion information.
+   foreach ($vars['rows'] as $i => $row) {
 Index: views_atom.views.inc
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.views.inc,v
-retrieving revision 1.1
-diff -u -p -r1.1 views_atom.views.inc
---- views_atom.views.inc	21 Sep 2010 21:36:52 -0000	1.1
-+++ views_atom.views.inc	19 Nov 2010 19:33:58 -0000
+retrieving revision 1.1.2.1
+diff -u -p -r1.1.2.1 views_atom.views.inc
+--- views_atom.views.inc	31 Dec 2010 22:07:37 -0000	1.1.2.1
++++ views_atom.views.inc	3 Feb 2011 11:11:35 -0000
 @@ -66,6 +66,19 @@ function views_atom_views_plugins() {
      'type' => 'feed',
      'parent' => 'rdf',
@@ -146,7 +157,7 @@ diff -u -p -r1.1 views_atom.views.inc
 +    'theme file' => 'views_atom.theme.inc',
 +    'theme path' => drupal_get_path('module', 'views_atom'),
 +    'uses fields' => TRUE,
-+    'uses options' => FALSE,
++    'uses options' => TRUE,
 +    'type' => 'feed',
 +    'parent' => 'rdf'
 +  );
@@ -158,8 +169,8 @@ Index: views_plugin_row_rdf_node_custom.inc
 RCS file: views_plugin_row_rdf_node_custom.inc
 diff -N views_plugin_row_rdf_node_custom.inc
 --- /dev/null	1 Jan 1970 00:00:00 -0000
-+++ views_plugin_row_rdf_node_custom.inc	19 Nov 2010 19:33:58 -0000
-@@ -0,0 +1,96 @@
++++ views_plugin_row_rdf_node_custom.inc	3 Feb 2011 11:12:02 -0000
+@@ -0,0 +1,116 @@
 +<?php
 +// $Id: views_plugin_row_rdf_node.inc,v 1.1 2010/09/21 21:36:52 crell Exp $
 +
@@ -176,6 +187,26 @@ diff -N views_plugin_row_rdf_node_custom.inc
 +  // Basic properties that let the row style follow relationships.
 +  var $base_table = 'node';
 +  var $base_field = 'nid';
++  
++  function option_definition() {
++    $options = parent::option_definition();
++    $options['taxonomy_mapping'] = array('default' => '');
++
++    return $options;
++  }
++
++  /**
++   * Provide a form for setting options.
++   */
++  function options_form(&$form, &$form_state) {
++    
++    $form['taxonomy_mapping'] = array(
++      '#type' => 'textarea',
++      '#title' => t('Taxonomy mapping'),
++      '#description' => t('Enter the mapping of the vocabularies, under the form key|label, one per line'),
++      '#default_value' => $this->options['taxonomy_mapping']
++    );
++  }
 +
 +  function render($row) {
 +    // For the most part, this code is taken from node_feed() in node.module
@@ -238,7 +269,7 @@ diff -N views_plugin_row_rdf_node_custom.inc
 +    }
 +
 +    // Allow other modules the opportunity to get in on the XML conversion action.
-+    module_invoke_all('views_atom_render', $node, $entity_xml, $this->view);
++    module_invoke_all('views_atom_render', $node, $entity_xml, $this);
 +    module_invoke_all('views_atom_render_node', $entity_xml);
 +
 +    drupal_alter('views_atom_render_rdf', $entity_xml, $node);

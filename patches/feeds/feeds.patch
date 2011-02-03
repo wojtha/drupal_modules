@@ -1,0 +1,209 @@
+? feeds.patch
+Index: feeds.pages.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds/feeds.pages.inc,v
+retrieving revision 1.22.2.1
+diff -u -p -r1.22.2.1 feeds.pages.inc
+--- feeds.pages.inc	25 Oct 2010 22:14:58 -0000	1.22.2.1
++++ feeds.pages.inc	3 Feb 2011 10:19:32 -0000
+@@ -59,6 +59,14 @@ function feeds_import_form(&$form_state,
+     '#type' => 'submit',
+     '#value' => t('Import'),
+   );
++  $config = $source->importer->fetcher->getConfig();
++  if ($config['use_pubsubhubbub']) {
++    $form['subscribe'] = array(
++      '#type' => 'submit',
++      '#value' => t('Subscribe'),
++      '#submit' => array('feeds_import_form_subscribe')
++    );
++  }
+   return $form;
+ }
+ 
+@@ -91,6 +99,16 @@ function feeds_import_form_submit($form,
+ }
+ 
+ /**
++ * Subscribe to feed if a hub is available without importing the data
++ */
++function feeds_import_form_subscribe($form, &$form_state) {
++  $source = feeds_source($form['#importer_id']);
++  $source->addConfig($form_state['values']['feeds']);
++  $source->save();
++  drupal_set_message(t('Successfully subscribed to the hub'), 'status');
++}
++
++/**
+  * Render a feeds import form on node/id/import pages.
+  */
+ function feeds_import_tab_form(&$form_state, $node) {
+Index: includes/FeedsSource.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds/includes/FeedsSource.inc,v
+retrieving revision 1.21.2.1
+diff -u -p -r1.21.2.1 FeedsSource.inc
+--- includes/FeedsSource.inc	26 Sep 2010 17:39:45 -0000	1.21.2.1
++++ includes/FeedsSource.inc	3 Feb 2011 10:19:32 -0000
+@@ -138,10 +138,15 @@ class FeedsSource extends FeedsConfigura
+    * @throws
+    *   Throws Exception if an error occurs when importing.
+    */
+-  public function import() {
++  public function import($changed = NULL) {
+     try {
+       if (!$this->batch || !($this->batch instanceof FeedsImportBatch)) {
+-        $this->batch = $this->importer->fetcher->fetch($this);
++        if (!$changed) {
++          $this->batch = $this->importer->fetcher->fetch($this);
++        }
++        else {
++          $this->batch = new FeedsImportBatch($changed);
++        }
+         $this->importer->parser->parse($this->batch, $this);
+         module_invoke_all('feeds_after_parse', $this->importer, $this);
+       }
+Index: plugins/FeedsHTTPFetcher.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsHTTPFetcher.inc,v
+retrieving revision 1.25
+diff -u -p -r1.25 FeedsHTTPFetcher.inc
+--- plugins/FeedsHTTPFetcher.inc	15 Sep 2010 19:40:57 -0000	1.25
++++ plugins/FeedsHTTPFetcher.inc	3 Feb 2011 10:19:32 -0000
+@@ -19,7 +19,7 @@ class FeedsHTTPBatch extends FeedsImport
+   /**
+    * Constructor.
+    */
+-  public function __construct($url = NULL, $feed_nid) {
++  public function __construct($url = NULL, $feed_nid = 0) {
+     $this->url = $url;
+     parent::__construct('', $feed_nid);
+   }
+@@ -69,16 +69,26 @@ class FeedsHTTPFetcher extends FeedsFetc
+   public function request($feed_nid = 0) {
+     feeds_dbg($_GET);
+     @feeds_dbg(file_get_contents('php://input'));
++    // Get PuSHSubscriber instance
++    $subscriber = $this->subscriber($feed_nid);
++    
+     // A subscription verification has been sent, verify.
+     if (isset($_GET['hub_challenge'])) {
+-      $this->subscriber($feed_nid)->verifyRequest();
++      $subscriber->verifyRequest();
+     }
+     // No subscription notification has ben sent, we are being notified.
+     else {
+       try {
+-        feeds_source($this->id, $feed_nid)->existing()->import();
++        $changed = $subscriber->receive();
++        if ($changed) {
++          feeds_source($this->id, $feed_nid)->existing()->import($changed);
++        }
++        else {
++          throw new Exception(t('Could not verify signature'));
++        }
+       }
+       catch (Exception $e) {
++        watchdog('FeedsHTTPFetcher', t('An exception occured: %exception', array('%exception' => $e->getMessage())));
+         // In case of an error, respond with a 503 Service (temporary) unavailable.
+         header('HTTP/1.1 503 "Not Found"', null, 503);
+         exit();
+@@ -162,7 +172,10 @@ class FeedsHTTPFetcher extends FeedsFetc
+    * Override sourceSave() - subscribe to hub.
+    */
+   public function sourceSave(FeedsSource $source) {
+-    if ($this->config['use_pubsubhubbub']) {
++    $config = $source->getConfigFor($this);
++    $source_url = $config['source'];
++    
++    if ($this->config['use_pubsubhubbub'] && !PushSubscription::exists($source_url)) {
+       $this->subscribe($source);
+     }
+   }
+@@ -231,6 +244,18 @@ class PuSHSubscription implements PuSHSu
+       return new PuSHSubscription($v['domain'], $v['subscriber_id'], $v['hub'], $v['topic'], $v['secret'], $v['status'], $v['post_fields'], $v['timestamp']);
+     }
+   }
++  
++  /**
++   * Verifies if a subscription to a topic exists
++   */
++  public static function exists($topic) {
++    if ($v = db_fetch_array(db_query("SELECT * FROM {feeds_push_subscriptions} WHERE topic = '%s'", $topic))) {
++      return TRUE;
++    }
++    else {
++      return FALSE;
++    }
++  }
+ 
+   /**
+    * Create a subscription.
+Index: plugins/FeedsNodeProcessor.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsNodeProcessor.inc,v
+retrieving revision 1.51.2.2
+diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
+--- plugins/FeedsNodeProcessor.inc	25 Oct 2010 22:43:03 -0000	1.51.2.2
++++ plugins/FeedsNodeProcessor.inc	3 Feb 2011 10:19:33 -0000
+@@ -42,6 +42,9 @@ class FeedsNodeProcessor extends FeedsPr
+         }
+ 
+         $node = $this->buildNode($nid, $source->feed_nid);
++        if ($this->config['taxonomy_override']) {
++          $this->override_taxonomy($node);
++        }
+         $node->feeds_node_item->hash = $hash;
+ 
+         // Map and save node. If errors occur don't stop but report them.
+@@ -80,6 +83,29 @@ class FeedsNodeProcessor extends FeedsPr
+     }
+     $batch->setProgress(FEEDS_PROCESSING, FEEDS_BATCH_COMPLETE);
+   }
++  
++  /**
++   * Override node taxonomy terms
++   */
++  private function override_taxonomy(&$node) {
++    $mappings = $this->config['mappings'];
++    foreach ($mappings as $mapping) {
++      $target = $mapping['target'];
++      $fname = substr($target,0,8);
++      if ($fname == 'taxonomy') {
++        $vid = str_replace('taxonomy:', '', $target);
++        $tids = array();
++        foreach ($node->taxonomy as $term) {
++          if ($term->vid == $vid) {
++            $tids[] = $term->tid;
++          }
++        }
++        foreach ($tids as $tid) {
++          unset($node->taxonomy[$tid]);
++        }
++      }
++    }
++  }
+ 
+   /**
+    * Implementation of FeedsProcessor::clear().
+@@ -150,6 +176,7 @@ class FeedsNodeProcessor extends FeedsPr
+       'expire' => FEEDS_EXPIRE_NEVER,
+       'mappings' => array(),
+       'author' => 0,
++      'taxonomy_override' => 0,
+     );
+   }
+ 
+@@ -205,6 +232,12 @@ class FeedsNodeProcessor extends FeedsPr
+       ),
+       '#default_value' => $this->config['update_existing'],
+     );
++    $form['taxonomy_override'] = array(
++      '#type' => 'checkbox',
++      '#title' => t('Override taxonomy'),
++      '#description' => t('Check this box if you want feed terms to override node terms.'),
++      '#default_value' => $this->config['taxonomy_override']
++    );
+     return $form;
+   }
+ 

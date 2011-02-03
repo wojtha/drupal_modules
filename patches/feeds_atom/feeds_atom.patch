@@ -2,11 +2,88 @@
 Index: feeds_atom.module
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/feeds_atom.module,v
-retrieving revision 1.1
-diff -u -p -r1.1 feeds_atom.module
---- feeds_atom.module	21 Sep 2010 21:58:38 -0000	1.1
-+++ feeds_atom.module	19 Nov 2010 16:06:37 -0000
-@@ -22,6 +22,17 @@ function feeds_atom_feeds_plugins() {
+retrieving revision 1.1.2.3
+diff -u -p -r1.1.2.3 feeds_atom.module
+--- feeds_atom.module	3 Jan 2011 23:05:49 -0000	1.1.2.3
++++ feeds_atom.module	3 Feb 2011 10:42:09 -0000
+@@ -1,16 +1,7 @@
+ <?php
+-// $Id: feeds_atom.module,v 1.1.2.3 2011/01/03 23:05:49 hefox Exp $
+-
+-/**
+- * @file
+- * Contains the main functionality for feeds_atom.
+- */
+ 
+ define('FEEDS_ATOM_TOMBSTONE_NAMESPACE', 'http://purl.org/atompub/tombstones/1.0');
+ 
+-/**
+- * Implementation of hook_ctools_plugin_api().
+- */
+ function feeds_atom_ctools_plugin_api($owner, $api) {
+   if ($owner == 'feeds' && $api == 'plugins') {
+     return array('version' => 1);
+@@ -18,9 +9,57 @@ function feeds_atom_ctools_plugin_api($o
+ }
+ 
+ /**
+- * Implementation of hook_feeds_plugins().
+- */
++* Implementation of hook_feeds_after_parse().
++*
++* This is needed for feeds_tamper. It allows feeds_tamper to execute its plugins on a
++* feeds_atom feed importer.
++*/
++function feeds_atom_feeds_after_parse(FeedsImporter $importer, FeedsSource $source) {
++  if (module_exists('feeds_tamper')) {
++    $instances = feeds_tamper_load_by_importer($importer->id);
++    if (empty($instances)) {
++      return;
++    }
++    foreach ($source->batch->items as $item_key => &$item) {
++      foreach ($instances as $element_key => $instances_) {
++        foreach ($instances_ as $instance) {
++          $plugin = feeds_tamper_get_plugin($instance->plugin_id);
++
++          if (is_array($item['rdf'][$element_key]) && $plugin['multi'] == 'loop') {
++            foreach ($item['rdf'][$element_key] as &$i) {
++              $plugin['callback']($source, $item_key, $element_key, $i, $instance->settings);
++            }
++          }
++          
++          else if (is_array($item['rdf'][$element_key]) && $plugin['multi'] == 'direct') {
++            $plugin['callback']($source, $item_key, $element_key, $item['rdf'][$element_key], $instance->settings);
++          }
++          
++          else if (!is_array($item['rdf'][$element_key]) && $plugin['single'] != 'skip') {
++            $plugin['callback']($source, $item_key, $element_key, $item['rdf'][$element_key], $instance->settings);
++          }
++          
++          else if (is_array($item[$element_key]) && $plugin['multi'] == 'loop') {
++            foreach ($item[$element_key] as &$i) {
++              $plugin['callback']($source, $item_key, $element_key, $i, $instance->settings);
++            }
++          }
++
++          else if (is_array($item[$element_key]) && $plugin['multi'] == 'direct') {
++            $plugin['callback']($source, $item_key, $element_key, $item[$element_key], $instance->settings);
++          }
++
++          else if (!is_array($item[$element_key]) && $plugin['single'] != 'skip') {
++            $plugin['callback']($source, $item_key, $element_key, $item[$element_key], $instance->settings);
++          }
++        }
++      }
++    }
++  }
++}
++
+ function feeds_atom_feeds_plugins() {
++
+   $path = drupal_get_path('module', 'feeds_atom') .'/plugins';
+ 
+   $info['FeedsAtomRDFParser'] = array(
+@@ -33,6 +72,17 @@ function feeds_atom_feeds_plugins() {
        'path' => $path
      )
    );
@@ -24,62 +101,92 @@ diff -u -p -r1.1 feeds_atom.module
  
    $info['FeedsAtomRDFProcessor'] = array(
      'name' => 'FeedsAtomRDF Processing Stage',
-Index: libraries/atomrdf_parser.inc
-===================================================================
-RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/libraries/atomrdf_parser.inc,v
-retrieving revision 1.1
-diff -u -p -r1.1 atomrdf_parser.inc
---- libraries/atomrdf_parser.inc	21 Sep 2010 22:08:31 -0000	1.1
-+++ libraries/atomrdf_parser.inc	19 Nov 2010 16:06:37 -0000
-@@ -217,14 +217,32 @@ function atomrdf_parse($feed_XML,$feed_r
-     $author_found = FALSE;
-     if (!empty($news->source->author->name)) {
-       $original_author = "{$news->source->author->name}";
-+      if (!empty($news->source->author->email)) {
-+        $original_author_email = "{$news->source->author->email}";
-+      }
-+      if (!empty($news->source->author->url)) {
-+        $original_author_url = "{$news->source->author->url}";
-+      }
-       $author_found = TRUE;
+@@ -75,43 +125,27 @@ function taxonomy_feeds_atom_rdf_map_alt
+   // Process the term data.
+   foreach ($source_item['rdf']['taxonomy'] as $source_term) {
+     // Add new terms if they don't exist
+-    $vid = NULL;
+-    $tid = NULL;
+-
+-    // Find the vocabulary.
+-    if (!empty($source_term['vocabulary'])) {
+-      // Features intergration: Features stores vocabulary machine name's in
+-      // module key prepended with features_
+-      if (module_exists('features')) {
+-        $machine_name = !empty($source_term['machine']) ? $source_term['machine'] : $source_term['vocabulary'];
+-        // Add in features_ if doesn't exist
+-        if (strpos($machine_name, 'features_') !== 0) {
+-          $machine_name = 'features_' . $machine_name;
+-        }
+-        $vid = db_result(db_query("SELECT vid FROM {vocabulary} WHERE module = '%s'", strtolower($machine_name)));
+-      }
+-      // Fallback to name matching if vid not found above.
+-      if (empty($vid)) {
+-        $vid = db_result(db_query("SELECT vid FROM {vocabulary} WHERE lower(name) = '%s'", strtolower($source_term['vocabulary'])));
+-      }
++    $term = db_fetch_object(db_query("SELECT * FROM {term_data} WHERE name = '%s'", $source_term['title']));
++    if ($term) {
++      $tid = $term->tid;
      }
-     else if (!empty($news->author->name)) {
-       $original_author = "{$news->author->name}";
-+      if (!empty($news->author->email)) {
-+        $original_author_email = "{$news->author->email}";
+-
+-    // See if the term already exists
+-    foreach (taxonomy_get_term_by_name($source_term['title']) as $term) {
+-      // if VID was not found but name matches or vid is term's vocabulary.
+-      if (empty($vid) || $vid == $term->vid) {
+-        $tid = $term->tid;
++    else {
++      $vocabulary = db_fetch_object(db_query("SELECT * FROM {vocabulary} WHERE name = '%s'", $source_term['vocabulary']));
++      if (!empty($vocabulary->vid)) {
++        // Create the new term.
++        $new_term = array(
++          'vid' => $vocabulary->vid,
++          'name' => $source_term['title'],
++          'description' => $source_term['description'],
++        );
++        drupal_write_record('term_data', $new_term);
++        $tid = db_last_insert_id('term_data', 'tid');
++        $term_hierarchy = array('tid' => $tid, 'parent' => 0);
++        drupal_write_record('term_hierarchy', $term_hierarchy);
 +      }
-+      if (!empty($news->author->url)) {
-+        $original_author_url = "{$news->author->url}";
-+      }
-       $author_found = TRUE;
-     }
-     if (!empty($feed_XML->author->name) && !$author_found) {
-       $original_author = "{$feed_XML->author->name}";
-+      if (!empty($feed_XML->author->email)) {
-+        $original_author_email = "{$feed_XML->author->email}";
-+      }
-+      if (!empty($feed_XML->author->url)) {
-+        $original_author_url = "{$feed_XML->author->url}";
-+      }
++      else {
++        // Skip the term, there is not a similar vocabulary.
+       }
+-    }
+-    // Create the new term if doesn't exist and know vocabulary
+-    if (empty($tid) && !empty($vid)) {
+-      $new_term = array(
+-        'vid' => $vid,
+-        'name' => $source_term['title'],
+-        'description' => $source_term['description'],
+-      );
+-      taxonomy_save_term($new_term);
+-      $tid = $new_term['tid'];
      }
  
-     // some src elements in some valid atom feeds contained no urls at all
-@@ -245,6 +263,8 @@ function atomrdf_parse($feed_XML,$feed_r
-     $item['title'] = _parser_common_syndication_title($title, $body);
-     $item['description'] = $body;
-     $item['author_name'] = $original_author;
-+    $item['author_email'] = $original_author_email;
-+    $item['author_url'] = $original_author_url;
-     $item['timestamp'] = _parser_common_syndication_parse_date(isset($news->published) ? "{$news->published}" : "{$news->issued}");
-     $item['tags'] = isset($additional_taxonomies['ATOM Categories']) ? $additional_taxonomies['ATOM Categories'] : array();
-     $item['domains'] = isset($additional_taxonomies['ATOM Domains']) ? $additional_taxonomies['ATOM Domains'] : array();
+     // Apply the term to the target node.
+@@ -126,6 +160,7 @@ function taxonomy_feeds_atom_rdf_map_alt
+  * Implementation of hook_feeds_atom_rdf_map_alter().
+  */
+ function filefield_feeds_atom_rdf_map_alter(&$target_item, $source_item, FeedsSource $source) {
++
+   // For any filefield in the incoming data, check to see if a full URL to the file
+   // is specified.  If so, import it outright.
+   foreach ($source_item['rdf'] as $field_name => $field) {
+@@ -161,6 +196,7 @@ function filefield_feeds_atom_rdf_map_al
+  * Implementation of hook_file_delete().
+  */
+ function feeds_atom_file_delete($file) {
++
+   // Clean up our extra tracking information.
+   db_query("DELETE FROM {feeds_atom_file_import} WHERE fid = %d", $file->fid);
+ }
 Index: plugins/FeedsAtomRDFCustomParser.inc
 ===================================================================
 RCS file: plugins/FeedsAtomRDFCustomParser.inc
 diff -N plugins/FeedsAtomRDFCustomParser.inc
 --- /dev/null	1 Jan 1970 00:00:00 -0000
-+++ plugins/FeedsAtomRDFCustomParser.inc	19 Nov 2010 16:06:37 -0000
-@@ -0,0 +1,68 @@
++++ plugins/FeedsAtomRDFCustomParser.inc	3 Feb 2011 10:44:33 -0000
+@@ -0,0 +1,112 @@
 +<?php
 +
 +/**
@@ -93,9 +200,9 @@ diff -N plugins/FeedsAtomRDFCustomParser.inc
 +  public function parse(FeedsImportBatch $batch, FeedsSource $source) {
 +    require_once './' . drupal_get_path('module','feeds_atom') . '/libraries/atomrdf_parser.inc';
 +    $result = atomrdf_parser_parse($batch->getRaw());
-+    $batch->setTitle($result['title']);
-+    $batch->setDescription($result['description']);
-+    $batch->setLink($result['link']);
++    $batch->title = $result['title'];
++    $batch->description = $result['description'];
++    $batch->link = $result['link'];
 +    if (is_array($result['items'])) {
 +      $batch->setItems($result['items']);
 +    }
@@ -140,107 +247,55 @@ diff -N plugins/FeedsAtomRDFCustomParser.inc
 +        case 'email':
 +          return $item['rdf'][$element_key][0]['email'];
 +          break;
++        case 'nodereference':
++          if ($item['rdf'][$element_key][1]) {
++            $return = array();
++            foreach ($item['rdf'][$element_key] as $elt) {
++              if ($elt['guid']) {
++                $return[] = $elt['guid'];
++              }
++            }
++            return $return;
++          }
++          else {
++            return $item['rdf'][$element_key][0]['guid'];
++          }
++          break;
 +        default:
-+          return '';
++          if ($item['rdf'][$element_key][0]['value']) {
++            return $item['rdf'][$element_key][0]['value'];
++          }
++          else {
++            return '';
++          }
 +      }
-+    } else {
++    }
++    elseif (in_array($element_key, array('body', 'created', 'changed', 'uid'))) {
++      if (in_array($element_key, array('created', 'changed'))) {
++        return strtotime($item['rdf'][$element_key]);
++      }
++      elseif ($element_key == 'uid') {
++        $user = user_load(array('mail' => $item['author_email']));
++        return $user->uid;
++      }
++      else {
++        return $item['rdf'][$element_key];
++      }
++    }
++    elseif ($fname == 'taxono') { // Taxonomy
++      // Get vocabulary name
++      $tax_array = explode(':', $element_key);
++      $vocabulary = $tax_array[1];
++      $return_array = array();
++      foreach ($item['rdf']['taxonomy'] as $tag) {
++        if ($tag['vocabulary'] == $vocabulary) {
++          $return_array[] = $tag['label'];
++        }
++      }
++      return $return_array;
++    }
++    else {
 +      return isset($item[$element_key]) ? $item[$element_key] : '';
 +    }
 +  }
 +}
-Index: plugins/FeedsAtomRDFParser.inc
-===================================================================
-RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/plugins/FeedsAtomRDFParser.inc,v
-retrieving revision 1.1
-diff -u -p -r1.1 FeedsAtomRDFParser.inc
---- plugins/FeedsAtomRDFParser.inc	21 Sep 2010 22:02:16 -0000	1.1
-+++ plugins/FeedsAtomRDFParser.inc	19 Nov 2010 16:06:37 -0000
-@@ -40,6 +40,14 @@ class FeedsAtomRDFParser extends FeedsPa
-         'name' => t('Author name'),
-         'description' => t('Name of the feed item\'s author.'),
-       ),
-+      'author_email' => array(
-+        'name' => t('Author email'),
-+        'description' => t('Email of the feed item\'s author.'),
-+      ),
-+      'author_url' => array(
-+        'name' => t('Author url'),
-+        'description' => t('Url of the feed item\'s author.'),
-+      ),
-       'timestamp' => array(
-         'name' => t('Published date'),
-         'description' => t('Published date as UNIX time GMT of the feed item.'),
-Index: plugins/FeedsAtomRDFProcessor.inc
-===================================================================
-RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/plugins/FeedsAtomRDFProcessor.inc,v
-retrieving revision 1.1
-diff -u -p -r1.1 FeedsAtomRDFProcessor.inc
---- plugins/FeedsAtomRDFProcessor.inc	21 Sep 2010 22:02:16 -0000	1.1
-+++ plugins/FeedsAtomRDFProcessor.inc	19 Nov 2010 16:06:37 -0000
-@@ -18,7 +18,7 @@ class FeedsAtomRDFProcessor extends Feed
-       // If the item already exists and we're flagged to delete it, do that instead.
-       // This part is added from the parent class.
-       if (!empty($item['deleted'])) {
--        $nid = $this->existingItemIdGlobal($item, $source);
-+        $nid = $this->existingItemIdGlobal($batch, $source);
-         if (!empty($nid)) {
-           node_delete($nid);
-           continue;
-@@ -26,7 +26,7 @@ class FeedsAtomRDFProcessor extends Feed
-       }
- 
-       // Create/update if item does not exist or update existing is enabled.
--      $nid = empty($nid) ? $this->existingItemId($item, $source) : $nid;
-+      $nid = empty($nid) ? $this->existingItemId($batch, $source) : $nid;
-       if (empty($nid) || $this->config['update_existing']) {
- 
-         $node = new stdClass();
-@@ -66,7 +66,7 @@ class FeedsAtomRDFProcessor extends Feed
- 
-         // Map and save nodes. If errors occur don't stop but report them.
-         try {
--          $this->map($item, $node, $source);
-+          $this->map($batch, $node, $source);
-           node_save($node);
-           if (!empty($nid)) {
-             $batch->updated++;
-@@ -113,7 +113,8 @@ class FeedsAtomRDFProcessor extends Feed
-    *
-    * @see sites/all/modules/feeds/plugins/FeedsNodeProcessor#existingItemId($source_item, $source)
-    */
--  protected function existingItemIdGlobal($source_item, FeedsSource $source) {
-+  protected function existingItemIdGlobal($batch, FeedsSource $source) {
-+    $source_item = $batch->currentItem();
-     // Iterate through all unique targets and test whether they do already
-     // exist in the database.
-     foreach ($this->uniqueTargets($source_item) as $target => $value) {
-@@ -139,8 +140,10 @@ class FeedsAtomRDFProcessor extends Feed
-    * We also add a $source parameter that contains the FeedsSource object that
-    * controls this feed.
-    */
--  protected function map($source_item, $target_item, $source) {
-+  protected function map($batch, $target_item, $source) {
-     self::loadMappers();
-+    
-+    $source_item = $batch->currentItem();
- 
-     // Static cache $targets as getMappingTargets() may be an expensive method.
-     static $targets;
-@@ -169,7 +172,7 @@ class FeedsAtomRDFProcessor extends Feed
-         // Set properties on the node.  There's a couple we know we don't want,
-         // because their meaning is site-specific anyway.
-         // @todo Replace this logic with the mapping engine for more flexibility.
--        if (!in_array($key, array('nid', 'vid', 'revision_uid', 'log', 'created', 'changed', 'revision_timestamp', 'last_comment_timestamp'))) {
-+        if (!in_array($key, array('nid', 'vid', 'revision_uid', 'log', 'created', 'changed', 'revision_timestamp', 'last_comment_timestamp', 'type'))) {
-           $target_item->$key = $value;
-         }
-       }
-@@ -181,7 +184,7 @@ class FeedsAtomRDFProcessor extends Feed
-     // stick it on the right place of the target item. If the mapping specifies
-     // a callback method, use the callback instead of setTargetElement().
-     foreach ($this->config['mappings'] as $mapping) {
--      $value = $parser->getSourceElement($source_item, $mapping['source']);
-+      $value = $parser->getSourceElement($batch, $mapping['source']);
- 
-       if (is_array($targets[$this->id][$mapping['target']]) && isset($targets[$this->id][$mapping['target']]['callback']) && function_exists($targets[$this->id][$mapping['target']]['callback'])) {
-         $callback = $targets[$this->id][$mapping['target']]['callback'];
