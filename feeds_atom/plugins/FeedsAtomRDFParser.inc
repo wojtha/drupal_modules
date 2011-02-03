@@ -1,4 +1,11 @@
 <?php
+// $Id: FeedsAtomRDFParser.inc,v 1.1.2.2 2011/01/01 00:10:39 hefox Exp $
+
+/**
+ * @file
+ * Contains the feeds atom RDF parser class.
+ */
+
 
 /**
  * Parses Atom RDF feeds.
@@ -9,7 +16,7 @@ class FeedsAtomRDFParser extends FeedsParser {
    * Implementation of FeedsParser::parse().
    */
   public function parse(FeedsImportBatch $batch, FeedsSource $source) {
-    require_once './' . drupal_get_path('module','feeds_atom') . '/libraries/atomrdf_parser.inc';
+    require_once './' . drupal_get_path('module', 'feeds_atom') . '/libraries/atomrdf_parser.inc';
     $result = atomrdf_parser_parse($batch->getRaw());
     $batch->setTitle($result['title']);
     $batch->setDescription($result['description']);

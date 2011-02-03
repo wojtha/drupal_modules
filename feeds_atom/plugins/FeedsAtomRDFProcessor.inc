@@ -1,4 +1,10 @@
 <?php
+// $Id: FeedsAtomRDFProcessor.inc,v 1.1.2.1 2010/12/31 23:51:23 hefox Exp $
+
+/**
+ * @file
+ * Contains the feeds atom RDF processor class.
+ */
 
 /**
  * Creates nodes from feed items.
@@ -18,7 +24,7 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
       // If the item already exists and we're flagged to delete it, do that instead.
       // This part is added from the parent class.
       if (!empty($item['deleted'])) {
-        $nid = $this->existingItemIdGlobal($batch, $source);
+        $nid = $this->existingItemIdGlobal($item, $source);
         if (!empty($nid)) {
           node_delete($nid);
           continue;
@@ -26,7 +32,7 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
       }
 
       // Create/update if item does not exist or update existing is enabled.
-      $nid = empty($nid) ? $this->existingItemId($batch, $source) : $nid;
+      $nid = empty($nid) ? $this->existingItemId($item, $source) : $nid;
       if (empty($nid) || $this->config['update_existing']) {
 
         $node = new stdClass();
@@ -66,7 +72,7 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
 
         // Map and save nodes. If errors occur don't stop but report them.
         try {
-          $this->map($batch, $node, $source);
+          $this->map($item, $node, $source);
           node_save($node);
           if (!empty($nid)) {
             $batch->updated++;
@@ -111,10 +117,9 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
    *
    * @todo Refactor this once http://drupal.org/node/828176 gets resolved.
    *
-   * @see sites/all/modules/feeds/plugins/FeedsNodeProcessor#existingItemId($source_item, $source)
+   * @see FeedsNodeProcessor
    */
-  protected function existingItemIdGlobal($batch, FeedsSource $source) {
-    $source_item = $batch->currentItem();
+  protected function existingItemIdGlobal($source_item, FeedsSource $source) {
     // Iterate through all unique targets and test whether they do already
     // exist in the database.
     foreach ($this->uniqueTargets($source_item) as $target => $value) {
@@ -140,10 +145,8 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
    * We also add a $source parameter that contains the FeedsSource object that
    * controls this feed.
    */
-  protected function map($batch, $target_item, $source) {
+  protected function map($source_item, $target_item, $source) {
     self::loadMappers();
-    
-    $source_item = $batch->currentItem();
 
     // Static cache $targets as getMappingTargets() may be an expensive method.
     static $targets;
@@ -161,9 +164,9 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
     // http://civicactions.com/blog/cck_import_and_update
     // http://www.lullabot.com/articles/quick-and-dirty-cck-imports
     foreach ($source_item['rdf'] as $key => $value ) {
-      if(empty($key)) continue;
+      if (empty($key)) continue;
       $value = $source_item['rdf'][$key];
-      $fname = substr($key,0,6);
+      $fname = drupal_substr($key, 0, 6);
       if ($fname == "field_") {
         // Build up a field value.
         $target_item->$key = $value;
@@ -172,7 +175,7 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
         // Set properties on the node.  There's a couple we know we don't want,
         // because their meaning is site-specific anyway.
         // @todo Replace this logic with the mapping engine for more flexibility.
-        if (!in_array($key, array('nid', 'vid', 'revision_uid', 'log', 'created', 'changed', 'revision_timestamp', 'last_comment_timestamp', 'type'))) {
+        if (!in_array($key, array('nid', 'vid', 'revision_uid', 'log', 'created', 'changed', 'revision_timestamp', 'last_comment_timestamp'))) {
           $target_item->$key = $value;
         }
       }
@@ -184,7 +187,7 @@ class FeedsAtomRDFProcessor extends FeedsNodeProcessor {
     // stick it on the right place of the target item. If the mapping specifies
     // a callback method, use the callback instead of setTargetElement().
     foreach ($this->config['mappings'] as $mapping) {
-      $value = $parser->getSourceElement($batch, $mapping['source']);
+      $value = $parser->getSourceElement($source_item, $mapping['source']);
 
       if (is_array($targets[$this->id][$mapping['target']]) && isset($targets[$this->id][$mapping['target']]['callback']) && function_exists($targets[$this->id][$mapping['target']]['callback'])) {
         $callback = $targets[$this->id][$mapping['target']]['callback'];

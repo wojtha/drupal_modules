@@ -4,10 +4,3 @@ package = Feeds
 dependencies[] = feeds
 core = 6.x
 php = 5.2
-
-; Information added by drupal.org packaging script on 2010-09-21
-version = "6.x-1.0"
-core = "6.x"
-project = "feeds_atom"
-datestamp = "1285107361"
-

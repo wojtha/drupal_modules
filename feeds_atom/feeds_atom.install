@@ -1,4 +1,10 @@
 <?php
+// $Id: feeds_atom.install,v 1.1.2.1 2010/12/31 23:51:23 hefox Exp $
+
+/**
+ * @file
+ *   Install and uninstall schema and functions for the feeds_atom module.
+ */
 
 /**
  * Implementation of hook_install().
@@ -29,4 +35,11 @@ function feeds_atom_schema() {
   );
 
   return $schema;
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function feeds_atom_uninstall() {
+  drupal_uninstall_schema('feeds_atom');
 }

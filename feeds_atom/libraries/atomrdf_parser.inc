@@ -1,4 +1,10 @@
 <?php
+// $Id: atomrdf_parser.inc,v 1.1.2.3 2011/01/01 00:10:39 hefox Exp $
+
+/**
+ * @file
+ * Contains the atomrd parsing functions.
+ */
 
 /**
  * Parse the feed into a data structure.
@@ -38,7 +44,7 @@ function atomrdf_format_detect($xml) {
     return FALSE;
   }
   $attr = $xml->attributes();
-  $type = strtolower($xml->getName());
+  $type = drupal_strtolower($xml->getName());
 
   // If there are deleted-entry elements, then we know it's not just an Atom feed
   // but one with the Tombstone extension.
@@ -70,35 +76,35 @@ function atomrdf_format_detect($xml) {
  * Parse AtomRDF format - for example:
  *
  * <entry>
- * 	<title>Week in DC Tech: April 12th Edition</title>
- * 	<id>19</id>
- * 	<updated>2010-04-29T12:02:55-07:00</updated>
- * 	<published>2010-04-12T12:16:31-07:00</published>
- * 	<author><name></name></author>
- *	<content type="application/rdf+xml" xml:lang="en">
- *		<RDF>
- *			<entity>
- *				<title>Week in DC Tech: April 12th Edition </title>
- *				<properties>
- *					<created>2010-04-12T12:16:31-07:00</created>
- *					<changed>2010-04-29T12:02:55-07:00</changed>
- *					<uid>0</uid>
- *					<status>1</status>
- *					<promote>1</promote>
- *				</properties>
- *			</entity>
- *			<field type="number_float" name="field_superlative">
- *				<field-instance>
- *					<column name="value">1234.57</column>
- * 				</field-instance>
- *			</field>
- *		</RDF>
- *	</content>
+ *   <title>Week in DC Tech: April 12th Edition</title>
+ *   <id>19</id>
+ *   <updated>2010-04-29T12:02:55-07:00</updated>
+ *   <published>2010-04-12T12:16:31-07:00</published>
+ *   <author><name></name></author>
+ *  <content type="application/rdf+xml" xml:lang="en">
+ *    <RDF>
+ *      <entity>
+ *        <title>Week in DC Tech: April 12th Edition </title>
+ *        <properties>
+ *          <created>2010-04-12T12:16:31-07:00</created>
+ *          <changed>2010-04-29T12:02:55-07:00</changed>
+ *          <uid>0</uid>
+ *          <status>1</status>
+ *          <promote>1</promote>
+ *        </properties>
+ *      </entity>
+ *      <field type="number_float" name="field_superlative">
+ *        <field-instance>
+ *          <column name="value">1234.57</column>
+ *         </field-instance>
+ *      </field>
+ *    </RDF>
+ *  </content>
  * </entry>
  *
  */
 
-function atomrdf_parse($feed_XML,$feed_raw) {
+function atomrdf_parse($feed_XML, $feed_raw) {
 
   // declare normalized view of feed that will be returned when this method is done
   $parsed_source = array();
@@ -131,7 +137,7 @@ function atomrdf_parse($feed_XML,$feed_raw) {
   */
 
   // feed metadata
-  if(TRUE) {
+  if (TRUE) {
 
     // feed title
     $parsed_source['title'] = isset($feed_XML->title) ? _parser_common_syndication_title("{$feed_XML->title}") : "";
@@ -206,7 +212,7 @@ function atomrdf_parse($feed_XML,$feed_raw) {
       }
       $body .= "{$news->content}";
     }
-    else if (!empty($news->summary)) {
+    elseif (!empty($news->summary)) {
       foreach ($news->summary->children() as $child)  {
         $body .= $child->asXML();
       }
@@ -225,7 +231,7 @@ function atomrdf_parse($feed_XML,$feed_raw) {
       }
       $author_found = TRUE;
     }
-    else if (!empty($news->author->name)) {
+    elseif (!empty($news->author->name)) {
       $original_author = "{$news->author->name}";
       if (!empty($news->author->email)) {
         $original_author_email = "{$news->author->email}";
@@ -272,9 +278,9 @@ function atomrdf_parse($feed_XML,$feed_raw) {
     // Parse out RDF values
     $rdf = $news->content ? $news->content : $news;
     $rdfns1 = $rdf->children("http://www.w3.org/1999/02/22-rdf-syntax-ns");
-    if($rdfns1) {
+    if ($rdfns1) {
       $rdfns2 = $rdfns1->children("http://drupal.org/");
-      if($rdfns2) {
+      if ($rdfns2) {
         $item['rdf'] = atomrdf_custom_copy($rdfns2);
       }
     }
@@ -290,7 +296,7 @@ function atomrdf_parse($feed_XML,$feed_raw) {
   //$parsed_source['deleted'] = array();
     if (in_array(FEEDS_ATOM_TOMBSTONE_NAMESPACE, $feed_XML->getDocNamespaces())) {
     foreach ($feed_XML->xpath('at:deleted-entry') as $deleted) {
-       $item = array(
+      $item = array(
         'guid' => "{$deleted['ref']}",
         'deleted' => TRUE,
         'deleted_when' => "{$deleted['when']}",
@@ -324,19 +330,19 @@ function atomrdf_parse($feed_XML,$feed_raw) {
  */
 function atomrdf_custom_copy($xml) {
   $blob = array();
-  foreach($xml->children() as $xml_child) {
+  foreach ($xml->children() as $xml_child) {
     $key = $xml_child->getName();
-    if($key == "field") {
+    if ($key == "field") {
       // The name 'field-instance' has a dash in it! So we are trying to get it without referring to it.
       // @todo This can easily be done with the xpath() method, or with $xml_child->{'field-instance'}
 
       $i = 0;
       $values = array();
       // Each field instance is a value of possible multi values
-      foreach($xml_child->children() as $field_instance) {
+      foreach ($xml_child->children() as $field_instance) {
         $values[$i] = array();
         // each column makes up information for the value
-        foreach($field_instance->children() as $column) {
+        foreach ($field_instance->children() as $column) {
           $attributes = $column->attributes();
           if (!empty($attributes['name'])) {
             $name = (string) $attributes['name'];
@@ -354,7 +360,7 @@ function atomrdf_custom_copy($xml) {
 
       $blob[$key]['#attributes'] = array('type' => (string) $xml_child['type']);
     }
-    else if($key == "properties") {
+    elseif ($key == "properties") {
       // Save properties from the properties block
       foreach ($xml_child->children() as $property) {
         $key = "{$property->getName()}";
@@ -362,7 +368,7 @@ function atomrdf_custom_copy($xml) {
         $blob[$key] = $value;
       }
     }
-    else if ($key == 'taxonomy') {
+    elseif ($key == 'taxonomy') {
       foreach ($xml_child->children() as $term) {
         $values = array();
         foreach ($term as $data_type => $value) {
@@ -390,29 +396,29 @@ function atomrdf_custom_copy($xml) {
  */
 
 function atomrdf_bulk_copy($xml) {
-        if($xml) {
-                $count = 0;
-                $valid_count = 0;
-                $blob = array();
-                foreach($xml->children() as $xml_child) {
-                        $count = $count + 1;
-                        $key = $xml_child->getName();
-                        $value = atomrdf_bulk_copy($xml_child);
-                        if($key) {
-                                $blob[$key] = $value;
-                                $valid_count = $valid_count + 1;
-                        }
-                }
-                if($count > 0) {
-                        if($valid_count > 0) {
-                                return $blob;
-                        }
-                } else {
-                        return("{$xml}");
-                }
-        }
-
-        return NULL;
+  if ($xml) {
+    $count = 0;
+    $valid_count = 0;
+    $blob = array();
+    foreach ($xml->children() as $xml_child) {
+      $count = $count + 1;
+      $key = $xml_child->getName();
+      $value = atomrdf_bulk_copy($xml_child);
+      if ($key) {
+        $blob[$key] = $value;
+        $valid_count = $valid_count + 1;
+      }
+    }
+    if ($count > 0) {
+      if ($valid_count > 0) {
+        return $blob;
+      }
+    }
+    else {
+      return "{$xml}";
+    }
+  }
+  return NULL;
 }
 
 /**
