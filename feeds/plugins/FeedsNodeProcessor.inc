@@ -95,9 +95,11 @@ class FeedsNodeProcessor extends FeedsProcessor {
       if ($fname == 'taxonomy') {
         $vid = str_replace('taxonomy:', '', $target);
         $tids = array();
-        foreach ($node->taxonomy as $term) {
-          if ($term->vid == $vid) {
-            $tids[] = $term->tid;
+        if (is_array($node->taxonomy)) {
+          foreach ($node->taxonomy as $term) {
+            if ($term->vid == $vid) {
+              $tids[] = $term->tid;
+            }
           }
         }
         foreach ($tids as $tid) {

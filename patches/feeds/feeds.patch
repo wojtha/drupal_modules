@@ -5,7 +5,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/feeds.pages.inc,v
 retrieving revision 1.22.2.1
 diff -u -p -r1.22.2.1 feeds.pages.inc
 --- feeds.pages.inc	25 Oct 2010 22:14:58 -0000	1.22.2.1
-+++ feeds.pages.inc	4 Feb 2011 11:17:57 -0000
++++ feeds.pages.inc	4 Feb 2011 11:35:30 -0000
 @@ -59,6 +59,14 @@ function feeds_import_form(&$form_state,
      '#type' => 'submit',
      '#value' => t('Import'),
@@ -44,7 +44,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/includes/FeedsSource.i
 retrieving revision 1.21.2.1
 diff -u -p -r1.21.2.1 FeedsSource.inc
 --- includes/FeedsSource.inc	26 Sep 2010 17:39:45 -0000	1.21.2.1
-+++ includes/FeedsSource.inc	4 Feb 2011 11:17:58 -0000
++++ includes/FeedsSource.inc	4 Feb 2011 11:35:30 -0000
 @@ -138,10 +138,15 @@ class FeedsSource extends FeedsConfigura
     * @throws
     *   Throws Exception if an error occurs when importing.
@@ -69,7 +69,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/mappers/taxonomy.inc,v
 retrieving revision 1.11.2.2
 diff -u -p -r1.11.2.2 taxonomy.inc
 --- mappers/taxonomy.inc	28 Oct 2010 20:49:38 -0000	1.11.2.2
-+++ mappers/taxonomy.inc	4 Feb 2011 11:17:58 -0000
++++ mappers/taxonomy.inc	4 Feb 2011 11:35:30 -0000
 @@ -52,6 +52,7 @@ function taxonomy_feeds_node_processor_t
        'callback' => 'taxonomy_feeds_set_target',
        'description' => $description,
@@ -132,7 +132,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsHTTPFetch
 retrieving revision 1.25
 diff -u -p -r1.25 FeedsHTTPFetcher.inc
 --- plugins/FeedsHTTPFetcher.inc	15 Sep 2010 19:40:57 -0000	1.25
-+++ plugins/FeedsHTTPFetcher.inc	4 Feb 2011 11:17:58 -0000
++++ plugins/FeedsHTTPFetcher.inc	4 Feb 2011 11:35:30 -0000
 @@ -19,7 +19,7 @@ class FeedsHTTPBatch extends FeedsImport
    /**
     * Constructor.
@@ -208,7 +208,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsNodeProce
 retrieving revision 1.51.2.2
 diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
 --- plugins/FeedsNodeProcessor.inc	25 Oct 2010 22:43:03 -0000	1.51.2.2
-+++ plugins/FeedsNodeProcessor.inc	4 Feb 2011 11:17:58 -0000
++++ plugins/FeedsNodeProcessor.inc	4 Feb 2011 11:35:31 -0000
 @@ -42,11 +42,14 @@ class FeedsNodeProcessor extends FeedsPr
          }
  
@@ -225,7 +225,7 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
            node_save($node);
            if (!empty($nid)) {
              $batch->updated++;
-@@ -80,6 +83,29 @@ class FeedsNodeProcessor extends FeedsPr
+@@ -80,6 +83,31 @@ class FeedsNodeProcessor extends FeedsPr
      }
      $batch->setProgress(FEEDS_PROCESSING, FEEDS_BATCH_COMPLETE);
    }
@@ -241,9 +241,11 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
 +      if ($fname == 'taxonomy') {
 +        $vid = str_replace('taxonomy:', '', $target);
 +        $tids = array();
-+        foreach ($node->taxonomy as $term) {
-+          if ($term->vid == $vid) {
-+            $tids[] = $term->tid;
++        if (is_array($node->taxonomy)) {
++          foreach ($node->taxonomy as $term) {
++            if ($term->vid == $vid) {
++              $tids[] = $term->tid;
++            }
 +          }
 +        }
 +        foreach ($tids as $tid) {
@@ -255,7 +257,7 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
  
    /**
     * Implementation of FeedsProcessor::clear().
-@@ -150,6 +176,8 @@ class FeedsNodeProcessor extends FeedsPr
+@@ -150,6 +178,8 @@ class FeedsNodeProcessor extends FeedsPr
        'expire' => FEEDS_EXPIRE_NEVER,
        'mappings' => array(),
        'author' => 0,
@@ -264,7 +266,7 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
      );
    }
  
-@@ -205,6 +233,18 @@ class FeedsNodeProcessor extends FeedsPr
+@@ -205,6 +235,18 @@ class FeedsNodeProcessor extends FeedsPr
        ),
        '#default_value' => $this->config['update_existing'],
      );
@@ -289,7 +291,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsProcessor
 retrieving revision 1.18
 diff -u -p -r1.18 FeedsProcessor.inc
 --- plugins/FeedsProcessor.inc	10 Sep 2010 15:44:56 -0000	1.18
-+++ plugins/FeedsProcessor.inc	4 Feb 2011 11:17:58 -0000
++++ plugins/FeedsProcessor.inc	4 Feb 2011 11:35:31 -0000
 @@ -82,7 +82,7 @@ abstract class FeedsProcessor extends Fe
     * @see hook_feeds_term_processor_targets_alter()
     * @see hook_feeds_user_processor_targets_alter()
