@@ -98,9 +98,11 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
       $tax_array = explode(':', $element_key);
       $vocabulary = $tax_array[1];
       $return_array = array();
-      foreach ($item['rdf']['taxonomy'] as $tag) {
-        if ($tag['vocabulary'] == $vocabulary) {
-          $return_array[] = $tag['label'];
+      if (is_array($item['rdf']['taxonomy'])) {
+        foreach ($item['rdf']['taxonomy'] as $tag) {
+          if ($tag['vocabulary'] == $vocabulary) {
+            $return_array[] = $tag['label'];
+          }
         }
       }
       return $return_array;

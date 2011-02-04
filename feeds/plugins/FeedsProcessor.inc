@@ -82,7 +82,7 @@ abstract class FeedsProcessor extends FeedsPlugin {
    * @see hook_feeds_term_processor_targets_alter()
    * @see hook_feeds_user_processor_targets_alter()
    */
-  protected function map(FeedsImportBatch $batch, $target_item = NULL) {
+  protected function map(FeedsImportBatch $batch, $target_item = NULL, $options = array()) {
 
     // Static cache $targets as getMappingTargets() may be an expensive method.
     static $sources;
@@ -144,7 +144,12 @@ abstract class FeedsProcessor extends FeedsPlugin {
           isset($targets[$this->id][$mapping['target']]['callback']) &&
           function_exists($targets[$this->id][$mapping['target']]['callback'])) {
         $callback = $targets[$this->id][$mapping['target']]['callback'];
-        $callback($target_item, $mapping['target'], $value);
+        if ($targets[$this->id][$mapping['target']]['uses options'] == TRUE) {
+          $callback($target_item, $mapping['target'], $value, $options);
+        }
+        else {
+          $callback($target_item, $mapping['target'], $value);
+        }
       }
       else {
         $this->setTargetElement($target_item, $mapping['target'], $value);

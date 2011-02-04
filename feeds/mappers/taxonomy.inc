@@ -52,6 +52,7 @@ function taxonomy_feeds_node_processor_targets_alter(&$targets, $content_type) {
       'callback' => 'taxonomy_feeds_set_target',
       'description' => $description,
       'real_target' => 'taxonomy',
+      'uses options' => TRUE
     );
   }
 }
@@ -72,7 +73,7 @@ function taxonomy_feeds_node_processor_targets_alter(&$targets, $content_type) {
  * Add the given terms to the node object so the taxonomy module can add them
  * on node_save().
  */
-function taxonomy_feeds_set_target(&$node, $key, $terms) {
+function taxonomy_feeds_set_target(&$node, $key, $terms, $options = array()) {
 
   // Return if there are no terms.
   if (empty($terms)) {
@@ -102,15 +103,31 @@ function taxonomy_feeds_set_target(&$node, $key, $terms) {
         $node->taxonomy[$term->tid] = (object)$term;
       }
       // Check if a term already exists.
-      elseif ($terms_found = taxonomy_get_term_by_name_vid($term, $vocabulary->vid)) {
-        // If any terms are found add them to the node's taxonomy by found tid.
-        foreach ($terms_found AS $term_found) {
-          $node->taxonomy[$term_found->tid] = $term_found;
-          if (!$vocabulary->multiple) {
-            break;
-          }
+      $terms_found = taxonomy_get_term_by_name_vid($term, $vocabulary->vid);
+      if (empty($terms_found) && $options['taxonomy_add'] == 1) {
+        // We are allowed to add taxonomy terms
+        $new_term = array(
+          'name' => $term,
+          'vid' => $vocabulary->vid
+        );
+        $status = taxonomy_save_term($new_term);
+        // Check to see if everything went right
+        if ($status == SAVED_NEW) {
+          $terms_found = array((object) $new_term);
+        }
+        else {
+          break;
         }
       }
+      
+      // If any terms are found add them to the node's taxonomy by found tid.
+      foreach ($terms_found AS $term_found) {
+        $node->taxonomy[$term_found->tid] = $term_found;
+        if (!$vocabulary->multiple) {
+          break;
+        }
+      }
+      
       // If the vocab is not for multiple tags break after the first hit.
       if (!$vocabulary->multiple) {
         break;

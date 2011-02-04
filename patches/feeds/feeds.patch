@@ -5,7 +5,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/feeds.pages.inc,v
 retrieving revision 1.22.2.1
 diff -u -p -r1.22.2.1 feeds.pages.inc
 --- feeds.pages.inc	25 Oct 2010 22:14:58 -0000	1.22.2.1
-+++ feeds.pages.inc	3 Feb 2011 10:19:32 -0000
++++ feeds.pages.inc	4 Feb 2011 11:17:57 -0000
 @@ -59,6 +59,14 @@ function feeds_import_form(&$form_state,
      '#type' => 'submit',
      '#value' => t('Import'),
@@ -44,7 +44,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/includes/FeedsSource.i
 retrieving revision 1.21.2.1
 diff -u -p -r1.21.2.1 FeedsSource.inc
 --- includes/FeedsSource.inc	26 Sep 2010 17:39:45 -0000	1.21.2.1
-+++ includes/FeedsSource.inc	3 Feb 2011 10:19:32 -0000
++++ includes/FeedsSource.inc	4 Feb 2011 11:17:58 -0000
 @@ -138,10 +138,15 @@ class FeedsSource extends FeedsConfigura
     * @throws
     *   Throws Exception if an error occurs when importing.
@@ -63,13 +63,76 @@ diff -u -p -r1.21.2.1 FeedsSource.inc
          $this->importer->parser->parse($this->batch, $this);
          module_invoke_all('feeds_after_parse', $this->importer, $this);
        }
+Index: mappers/taxonomy.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds/mappers/taxonomy.inc,v
+retrieving revision 1.11.2.2
+diff -u -p -r1.11.2.2 taxonomy.inc
+--- mappers/taxonomy.inc	28 Oct 2010 20:49:38 -0000	1.11.2.2
++++ mappers/taxonomy.inc	4 Feb 2011 11:17:58 -0000
+@@ -52,6 +52,7 @@ function taxonomy_feeds_node_processor_t
+       'callback' => 'taxonomy_feeds_set_target',
+       'description' => $description,
+       'real_target' => 'taxonomy',
++      'uses options' => TRUE
+     );
+   }
+ }
+@@ -72,7 +73,7 @@ function taxonomy_feeds_node_processor_t
+  * Add the given terms to the node object so the taxonomy module can add them
+  * on node_save().
+  */
+-function taxonomy_feeds_set_target(&$node, $key, $terms) {
++function taxonomy_feeds_set_target(&$node, $key, $terms, $options = array()) {
+ 
+   // Return if there are no terms.
+   if (empty($terms)) {
+@@ -102,15 +103,31 @@ function taxonomy_feeds_set_target(&$nod
+         $node->taxonomy[$term->tid] = (object)$term;
+       }
+       // Check if a term already exists.
+-      elseif ($terms_found = taxonomy_get_term_by_name_vid($term, $vocabulary->vid)) {
+-        // If any terms are found add them to the node's taxonomy by found tid.
+-        foreach ($terms_found AS $term_found) {
+-          $node->taxonomy[$term_found->tid] = $term_found;
+-          if (!$vocabulary->multiple) {
+-            break;
+-          }
++      $terms_found = taxonomy_get_term_by_name_vid($term, $vocabulary->vid);
++      if (empty($terms_found) && $options['taxonomy_add'] == 1) {
++        // We are allowed to add taxonomy terms
++        $new_term = array(
++          'name' => $term,
++          'vid' => $vocabulary->vid
++        );
++        $status = taxonomy_save_term($new_term);
++        // Check to see if everything went right
++        if ($status == SAVED_NEW) {
++          $terms_found = array((object) $new_term);
++        }
++        else {
++          break;
++        }
++      }
++      
++      // If any terms are found add them to the node's taxonomy by found tid.
++      foreach ($terms_found AS $term_found) {
++        $node->taxonomy[$term_found->tid] = $term_found;
++        if (!$vocabulary->multiple) {
++          break;
+         }
+       }
++      
+       // If the vocab is not for multiple tags break after the first hit.
+       if (!$vocabulary->multiple) {
+         break;
 Index: plugins/FeedsHTTPFetcher.inc
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsHTTPFetcher.inc,v
 retrieving revision 1.25
 diff -u -p -r1.25 FeedsHTTPFetcher.inc
 --- plugins/FeedsHTTPFetcher.inc	15 Sep 2010 19:40:57 -0000	1.25
-+++ plugins/FeedsHTTPFetcher.inc	3 Feb 2011 10:19:32 -0000
++++ plugins/FeedsHTTPFetcher.inc	4 Feb 2011 11:17:58 -0000
 @@ -19,7 +19,7 @@ class FeedsHTTPBatch extends FeedsImport
    /**
     * Constructor.
@@ -145,8 +208,8 @@ RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsNodeProce
 retrieving revision 1.51.2.2
 diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
 --- plugins/FeedsNodeProcessor.inc	25 Oct 2010 22:43:03 -0000	1.51.2.2
-+++ plugins/FeedsNodeProcessor.inc	3 Feb 2011 10:19:33 -0000
-@@ -42,6 +42,9 @@ class FeedsNodeProcessor extends FeedsPr
++++ plugins/FeedsNodeProcessor.inc	4 Feb 2011 11:17:58 -0000
+@@ -42,11 +42,14 @@ class FeedsNodeProcessor extends FeedsPr
          }
  
          $node = $this->buildNode($nid, $source->feed_nid);
@@ -156,6 +219,12 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
          $node->feeds_node_item->hash = $hash;
  
          // Map and save node. If errors occur don't stop but report them.
+         try {
+-          $this->map($batch, $node);
++          $this->map($batch, $node, $this->config);
+           node_save($node);
+           if (!empty($nid)) {
+             $batch->updated++;
 @@ -80,6 +83,29 @@ class FeedsNodeProcessor extends FeedsPr
      }
      $batch->setProgress(FEEDS_PROCESSING, FEEDS_BATCH_COMPLETE);
@@ -186,15 +255,16 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
  
    /**
     * Implementation of FeedsProcessor::clear().
-@@ -150,6 +176,7 @@ class FeedsNodeProcessor extends FeedsPr
+@@ -150,6 +176,8 @@ class FeedsNodeProcessor extends FeedsPr
        'expire' => FEEDS_EXPIRE_NEVER,
        'mappings' => array(),
        'author' => 0,
 +      'taxonomy_override' => 0,
++      'taxonomy_add' => 0
      );
    }
  
-@@ -205,6 +232,12 @@ class FeedsNodeProcessor extends FeedsPr
+@@ -205,6 +233,18 @@ class FeedsNodeProcessor extends FeedsPr
        ),
        '#default_value' => $this->config['update_existing'],
      );
@@ -204,6 +274,42 @@ diff -u -p -r1.51.2.2 FeedsNodeProcessor.inc
 +      '#description' => t('Check this box if you want feed terms to override node terms.'),
 +      '#default_value' => $this->config['taxonomy_override']
 +    );
++    $form['taxonomy_add'] = array(
++      '#type' => 'checkbox',
++      '#title' => t('Add terms to taxonomy'),
++      '#description' => t('Check this box if you want to add terms to the taxonomies if the terms do not already exist.'),
++      '#default_value' => $this->config['taxonomy_add']
++    );
      return $form;
    }
  
+Index: plugins/FeedsProcessor.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/feeds/plugins/FeedsProcessor.inc,v
+retrieving revision 1.18
+diff -u -p -r1.18 FeedsProcessor.inc
+--- plugins/FeedsProcessor.inc	10 Sep 2010 15:44:56 -0000	1.18
++++ plugins/FeedsProcessor.inc	4 Feb 2011 11:17:58 -0000
+@@ -82,7 +82,7 @@ abstract class FeedsProcessor extends Fe
+    * @see hook_feeds_term_processor_targets_alter()
+    * @see hook_feeds_user_processor_targets_alter()
+    */
+-  protected function map(FeedsImportBatch $batch, $target_item = NULL) {
++  protected function map(FeedsImportBatch $batch, $target_item = NULL, $options = array()) {
+ 
+     // Static cache $targets as getMappingTargets() may be an expensive method.
+     static $sources;
+@@ -144,7 +144,12 @@ abstract class FeedsProcessor extends Fe
+           isset($targets[$this->id][$mapping['target']]['callback']) &&
+           function_exists($targets[$this->id][$mapping['target']]['callback'])) {
+         $callback = $targets[$this->id][$mapping['target']]['callback'];
+-        $callback($target_item, $mapping['target'], $value);
++        if ($targets[$this->id][$mapping['target']]['uses options'] == TRUE) {
++          $callback($target_item, $mapping['target'], $value, $options);
++        }
++        else {
++          $callback($target_item, $mapping['target'], $value);
++        }
+       }
+       else {
+         $this->setTargetElement($target_item, $mapping['target'], $value);

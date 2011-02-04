@@ -49,7 +49,7 @@ class FeedsNodeProcessor extends FeedsProcessor {
 
         // Map and save node. If errors occur don't stop but report them.
         try {
-          $this->map($batch, $node);
+          $this->map($batch, $node, $this->config);
           node_save($node);
           if (!empty($nid)) {
             $batch->updated++;
@@ -177,6 +177,7 @@ class FeedsNodeProcessor extends FeedsProcessor {
       'mappings' => array(),
       'author' => 0,
       'taxonomy_override' => 0,
+      'taxonomy_add' => 0
     );
   }
 
@@ -237,6 +238,12 @@ class FeedsNodeProcessor extends FeedsProcessor {
       '#title' => t('Override taxonomy'),
       '#description' => t('Check this box if you want feed terms to override node terms.'),
       '#default_value' => $this->config['taxonomy_override']
+    );
+    $form['taxonomy_add'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Add terms to taxonomy'),
+      '#description' => t('Check this box if you want to add terms to the taxonomies if the terms do not already exist.'),
+      '#default_value' => $this->config['taxonomy_add']
     );
     return $form;
   }
