@@ -3,10 +3,34 @@ Index: views_atom.module
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.module,v
 retrieving revision 1.1.2.1
-diff -u -p -r1.1.2.1 views_atom.module
+diff -u -8 -p -r1.1.2.1 views_atom.module
 --- views_atom.module	31 Dec 2010 22:07:37 -0000	1.1.2.1
-+++ views_atom.module	3 Feb 2011 11:11:35 -0000
-@@ -141,7 +141,11 @@ function views_atom_sanitize($string) {
++++ views_atom.module	4 Feb 2011 12:23:02 -0000
+@@ -89,17 +89,17 @@ function views_atom_get_feed_displays() 
+  *   A unique string that identifies the specified entity.
+  */
+ function views_atom_guid($entity_type, $entity_id, $options = array()) {
+   // This is currently set to the absolute system path until a better UUID
+   // system can be implemented
+   $guid = url("$entity_type/$entity_id", array('absolute' => TRUE, 'alias' => TRUE, 'purl' => array('disabled' => TRUE), 'language' => ''));
+ 
+   // See if there already exists a guid for this node if configured to.
+-  if (!empty($options['use_existing_from_feeds']) && $entity_type == 'node' && module_exists('feeds')) {
++  if (!empty($options['use_existing_from_feed']) && $entity_type == 'node' && module_exists('feeds')) {
+     $temp_guid = db_result(db_query("SELECT guid FROM {feeds_node_item} WHERE nid = '%s'", $entity_id));
+     if ($temp_guid) {
+       $guid = $temp_guid;
+     }
+   }
+   return $guid;
+ }
+ 
+@@ -136,43 +136,73 @@ function views_atom_sanitize($string) {
+ 
+   return $string;
+ }
+ 
+ 
  /**
   * Implementation of hook_views_atom_render().
   */
@@ -19,7 +43,7 @@ diff -u -p -r1.1.2.1 views_atom.module
    // If there are any Fields associated with this entity, those each get
    // added via a <field> element.  Each <field> element is assumed to be
    // multi-value, just as Fields in Drupal are.
-@@ -149,25 +153,51 @@ function content_views_atom_render($node
+ 
    // This is totally the wrong way to do it, but CCK's API is too convoluted
    // for me to figure out something else right now.
    $result = db_query("SELECT field_name, type FROM {content_node_field}");
@@ -70,7 +94,7 @@ diff -u -p -r1.1.2.1 views_atom.module
 +        $field = array_filter($node->{$record->field_name});
 +        $field_xml = $entity_xml->addChild('field');
 +        $field_xml->addAttribute('type', $record->type);
-+        $field_xml->addAttribute('name', $record->field_name);
++        $field_xml->addAttribute('name', $label);
 +        foreach ($field as $instance) {
 +          $field_instance_xml = $field_xml->addChild('field-instance');
 +          foreach ($instance as $column => $value) {
@@ -87,7 +111,17 @@ diff -u -p -r1.1.2.1 views_atom.module
            }
          }
        }
-@@ -192,6 +222,19 @@ function filefield_views_atom_render_fie
+ 
+       module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
+     }
+   }
+ }
+@@ -187,29 +217,60 @@ function filefield_views_atom_render_fie
+     foreach ($field as $i => $instance) {
+       $url = file_create_url($instance['filepath']);
+       $new_column = $instances[$i]->addChild('column', $url);
+       $new_column->addAttribute('name', 'full_url');
+     }
    }
  }
  
@@ -105,16 +139,62 @@ diff -u -p -r1.1.2.1 views_atom.module
 +}
 +
  /**
-  * Implementation of hook_views_atom_render().
-  */
+- * Implementation of hook_views_atom_render().
+- */
+-function taxonomy_views_atom_render($node, $entity_xml) {
++* Implementation of hook_views_atom_render().
++*/
++function taxonomy_views_atom_render($node, $entity_xml, $display = NULL) {
++  $taxonomy_mapping = NULL;
++  if ($display != NULL && get_class($display) == 'views_plugin_row_rdf_node_custom') {
++    $taxonomy_mapping = $display->options['taxonomy_mapping'];
++    $lines = explode('\n', $taxonomy_mapping);
++    $new_labels = array();
++    foreach ($lines as $line) {
++      $tmp = array();
++      $tmp = explode('|', $line);
++      $vid = $tmp[0];
++      $new_labels[$vid] = $tmp[1];
++    }
++  }
++  
+   $taxonomy_xml = $entity_xml->addChild('taxonomy');
+   foreach ($node->taxonomy as $tid => $term) {
+     global $base_url;
+     $term_path = url(taxonomy_term_path($term), array('absolute' => TRUE, 'alias' => TRUE));
+     $vocabulary = taxonomy_vocabulary_load($term->vid);
+ 
+     $term_xml = $taxonomy_xml->addChild('term');
+     $term_xml->addAttribute('name', $term->name);
+     $term_xml->addChild('link', $term_path);
+     $term_xml->addChild('label', $term->name);
+     $term_xml->addChild('title', $term->name);
+     $term_xml->addChild('subject', $term->name);
+     $term_xml->addChild('description', views_atom_sanitize($term->description));
+-    $term_xml->addChild('vocabulary', $vocabulary->name);
++    $vid = $vocabulary->vid;
++    if (!$new_labels || !$new_labels[$vid]) {
++      $term_xml->addChild('vocabulary', $vocabulary->name);
++    }
++    else {
++      $term_xml->addChild('vocabulary', $new_labels[$vid]);
++    }
+   }
+ }
+-
 Index: views_atom.theme.inc
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.theme.inc,v
 retrieving revision 1.1.2.4
-diff -u -p -r1.1.2.4 views_atom.theme.inc
+diff -u -8 -p -r1.1.2.4 views_atom.theme.inc
 --- views_atom.theme.inc	31 Dec 2010 22:07:37 -0000	1.1.2.4
-+++ views_atom.theme.inc	3 Feb 2011 11:11:35 -0000
-@@ -74,6 +74,22 @@ function template_preprocess_views_view_
++++ views_atom.theme.inc	4 Feb 2011 12:23:02 -0000
+@@ -69,16 +69,32 @@ function template_preprocess_views_view_
+ 
+   $items = array();
+ 
+   $now = date('c');
+ 
    $vars['updated'] = $now;
  
    $vars['items'] = array();
@@ -137,14 +217,24 @@ diff -u -p -r1.1.2.4 views_atom.theme.inc
    $guid_options = isset($vars['view']->style_options['guid']) ? $vars['view']->style_options['guid'] : array();
    // Now process the rows into deletion information.
    foreach ($vars['rows'] as $i => $row) {
+     $item = array(
+       'guid' => views_atom_guid('node', $row->nid, $guid_options),
+       'when' => $now,
+       'by' => array(
+         'name' => '',
 Index: views_atom.views.inc
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.views.inc,v
 retrieving revision 1.1.2.1
-diff -u -p -r1.1.2.1 views_atom.views.inc
+diff -u -8 -p -r1.1.2.1 views_atom.views.inc
 --- views_atom.views.inc	31 Dec 2010 22:07:37 -0000	1.1.2.1
-+++ views_atom.views.inc	3 Feb 2011 11:11:35 -0000
-@@ -66,6 +66,19 @@ function views_atom_views_plugins() {
++++ views_atom.views.inc	4 Feb 2011 12:23:02 -0000
+@@ -61,11 +61,24 @@ function views_atom_views_plugins() {
+     'theme' => 'views_view_rdf_node',
+     'theme file' => 'views_atom.theme.inc',
+     'theme path' => drupal_get_path('module', 'views_atom'),
+     'uses fields' => TRUE,
+     'uses options' => FALSE,
      'type' => 'feed',
      'parent' => 'rdf',
    );
@@ -169,7 +259,7 @@ Index: views_plugin_row_rdf_node_custom.inc
 RCS file: views_plugin_row_rdf_node_custom.inc
 diff -N views_plugin_row_rdf_node_custom.inc
 --- /dev/null	1 Jan 1970 00:00:00 -0000
-+++ views_plugin_row_rdf_node_custom.inc	3 Feb 2011 11:12:02 -0000
++++ views_plugin_row_rdf_node_custom.inc	4 Feb 2011 12:23:02 -0000
 @@ -0,0 +1,116 @@
 +<?php
 +// $Id: views_plugin_row_rdf_node.inc,v 1.1 2010/09/21 21:36:52 crell Exp $

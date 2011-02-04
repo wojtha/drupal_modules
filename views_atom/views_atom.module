@@ -184,7 +184,7 @@ function content_views_atom_render($node, $entity_xml, $display = NULL) {
         $field = array_filter($node->{$record->field_name});
         $field_xml = $entity_xml->addChild('field');
         $field_xml->addAttribute('type', $record->type);
-        $field_xml->addAttribute('name', $record->field_name);
+        $field_xml->addAttribute('name', $label);
         foreach ($field as $instance) {
           $field_instance_xml = $field_xml->addChild('field-instance');
           foreach ($instance as $column => $value) {
@@ -236,9 +236,22 @@ function nodereference_views_atom_render_field(SimpleXMLElement $field_xml, $fie
 }
 
 /**
- * Implementation of hook_views_atom_render().
- */
-function taxonomy_views_atom_render($node, $entity_xml) {
+* Implementation of hook_views_atom_render().
+*/
+function taxonomy_views_atom_render($node, $entity_xml, $display = NULL) {
+  $taxonomy_mapping = NULL;
+  if ($display != NULL && get_class($display) == 'views_plugin_row_rdf_node_custom') {
+    $taxonomy_mapping = $display->options['taxonomy_mapping'];
+    $lines = explode('\n', $taxonomy_mapping);
+    $new_labels = array();
+    foreach ($lines as $line) {
+      $tmp = array();
+      $tmp = explode('|', $line);
+      $vid = $tmp[0];
+      $new_labels[$vid] = $tmp[1];
+    }
+  }
+  
   $taxonomy_xml = $entity_xml->addChild('taxonomy');
   foreach ($node->taxonomy as $tid => $term) {
     global $base_url;
@@ -252,7 +265,12 @@ function taxonomy_views_atom_render($node, $entity_xml) {
     $term_xml->addChild('title', $term->name);
     $term_xml->addChild('subject', $term->name);
     $term_xml->addChild('description', views_atom_sanitize($term->description));
-    $term_xml->addChild('vocabulary', $vocabulary->name);
+    $vid = $vocabulary->vid;
+    if (!$new_labels || !$new_labels[$vid]) {
+      $term_xml->addChild('vocabulary', $vocabulary->name);
+    }
+    else {
+      $term_xml->addChild('vocabulary', $new_labels[$vid]);
+    }
   }
 }
-
