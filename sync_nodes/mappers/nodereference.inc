@@ -44,7 +44,10 @@ function nodereference_feeds_set_target($node, $target, $value) {
     $i = 0;
     foreach ($value as $v) {
       if (!is_array($v) && !is_object($v) && $result = db_fetch_object(db_query("SELECT nid FROM {feeds_node_item} WHERE guid = '%s'", $v))) {
-        $field[$i]['nid'] = $result->nid;
+        $nid = _sync_nodes_guid_to_nid($v);
+        if ($nid != 0) {
+          $field[$i]['nid'] = $nid;
+        }
       }
       $i++;
     }
@@ -52,10 +55,33 @@ function nodereference_feeds_set_target($node, $target, $value) {
   else {
     // Get nid from guid
     $guid = $value;
-    if ($result = db_fetch_object(db_query("SELECT nid FROM {feeds_node_item} WHERE guid = '%s'", $guid))) {
-      $field[0]['nid'] = $result->nid;
+    $nid = _sync_nodes_guid_to_nid($guid);
+    if ($nid != 0) {
+      $field[0]['nid'] = $nid;
     }
   }
 
   $node->$target = $field;
+}
+
+/**
+ * Transforms a guid to a valid nid
+ */
+function _sync_nodes_guid_to_nid($guid) {
+  // Check whether this node was built on our site
+  $url = url("", array('absolute' => TRUE, 'language' => ''));
+  if (strpos($guid, $url) !== FALSE) {
+    // The node is ours, return the nid
+    $nid = str_replace($url.'node/', '', $guid);
+  }
+  else {
+    $result = db_fetch_object(db_query("SELECT nid FROM {feeds_node_item} WHERE guid = '%s'", $guid));
+    if ($result) {
+      $nid = $result->nid;
+    }
+    else {
+      $nid = 0;
+    }
+  }
+  return $nid;
 }
