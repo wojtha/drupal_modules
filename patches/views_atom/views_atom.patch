@@ -5,7 +5,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.module
 retrieving revision 1.1.2.1
 diff -u -8 -p -r1.1.2.1 views_atom.module
 --- views_atom.module	31 Dec 2010 22:07:37 -0000	1.1.2.1
-+++ views_atom.module	4 Feb 2011 12:23:02 -0000
++++ views_atom.module	8 Feb 2011 12:51:37 -0000
 @@ -89,17 +89,17 @@ function views_atom_get_feed_displays() 
   *   A unique string that identifies the specified entity.
   */
@@ -188,7 +188,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.theme.
 retrieving revision 1.1.2.4
 diff -u -8 -p -r1.1.2.4 views_atom.theme.inc
 --- views_atom.theme.inc	31 Dec 2010 22:07:37 -0000	1.1.2.4
-+++ views_atom.theme.inc	4 Feb 2011 12:23:02 -0000
++++ views_atom.theme.inc	8 Feb 2011 12:51:37 -0000
 @@ -69,16 +69,32 @@ function template_preprocess_views_view_
  
    $items = array();
@@ -228,7 +228,7 @@ RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_atom.views.
 retrieving revision 1.1.2.1
 diff -u -8 -p -r1.1.2.1 views_atom.views.inc
 --- views_atom.views.inc	31 Dec 2010 22:07:37 -0000	1.1.2.1
-+++ views_atom.views.inc	4 Feb 2011 12:23:02 -0000
++++ views_atom.views.inc	8 Feb 2011 12:51:37 -0000
 @@ -61,11 +61,24 @@ function views_atom_views_plugins() {
      'theme' => 'views_view_rdf_node',
      'theme file' => 'views_atom.theme.inc',
@@ -254,13 +254,40 @@ diff -u -8 -p -r1.1.2.1 views_atom.views.inc
  
    return $info;
  }
+Index: views_plugin_row_rdf_node.inc
+===================================================================
+RCS file: /cvs/drupal-contrib/contributions/modules/views_atom/views_plugin_row_rdf_node.inc,v
+retrieving revision 1.1
+diff -u -8 -p -r1.1 views_plugin_row_rdf_node.inc
+--- views_plugin_row_rdf_node.inc	21 Sep 2010 21:36:52 -0000	1.1
++++ views_plugin_row_rdf_node.inc	8 Feb 2011 12:51:37 -0000
+@@ -61,16 +61,19 @@ class views_plugin_row_rdf_node extends 
+     foreach ($node as $property => $value) {
+       if (is_scalar($value) && !empty($value)) {
+         // We want to map the date fields to Atom/RDF format properly.  The others
+         // we'll just send along as is.
+         if (in_array($property, array('created', 'changed'))) {
+           $properties_xml->addChild($property, date('c', $value));
+         }
+         else {
++          if ($property == 'tnid') {
++            $properties_xml->addChild('tguid', views_atom_guid('node', $value, array('use_existing_from_feed' => TRUE)));
++          }
+           $properties_xml->addChild($property, views_atom_sanitize($value));
+         }
+       }
+     }
+ 
+     // Allow other modules the opportunity to get in on the XML conversion action.
+     module_invoke_all('views_atom_render', $node, $entity_xml);
+     module_invoke_all('views_atom_render_node', $entity_xml);
 Index: views_plugin_row_rdf_node_custom.inc
 ===================================================================
 RCS file: views_plugin_row_rdf_node_custom.inc
 diff -N views_plugin_row_rdf_node_custom.inc
 --- /dev/null	1 Jan 1970 00:00:00 -0000
-+++ views_plugin_row_rdf_node_custom.inc	4 Feb 2011 12:23:02 -0000
-@@ -0,0 +1,116 @@
++++ views_plugin_row_rdf_node_custom.inc	8 Feb 2011 12:51:37 -0000
+@@ -0,0 +1,119 @@
 +<?php
 +// $Id: views_plugin_row_rdf_node.inc,v 1.1 2010/09/21 21:36:52 crell Exp $
 +
@@ -352,6 +379,9 @@ diff -N views_plugin_row_rdf_node_custom.inc
 +        else {
 +          // Make sure the property is part of the view fields and not excluded from display
 +          if (in_array($property, $keys) && !$this->view->field[$property]->options['exclude']) {
++            if ($property == 'tnid') {
++              $properties_xml->addChild('tguid', views_atom_guid('node', $value, array('use_existing_from_feed' => TRUE)));
++            }
 +            $properties_xml->addChild($property, views_atom_sanitize($value));
 +          }
 +        }

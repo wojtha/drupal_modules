@@ -3,10 +3,10 @@ Index: feeds_atom.module
 ===================================================================
 RCS file: /cvs/drupal-contrib/contributions/modules/feeds_atom/feeds_atom.module,v
 retrieving revision 1.1.2.3
-diff -u -p -r1.1.2.3 feeds_atom.module
+diff -u -8 -p -r1.1.2.3 feeds_atom.module
 --- feeds_atom.module	3 Jan 2011 23:05:49 -0000	1.1.2.3
-+++ feeds_atom.module	3 Feb 2011 10:42:09 -0000
-@@ -1,16 +1,7 @@
++++ feeds_atom.module	8 Feb 2011 12:48:06 -0000
+@@ -1,43 +1,93 @@
  <?php
 -// $Id: feeds_atom.module,v 1.1.2.3 2011/01/03 23:05:49 hefox Exp $
 -
@@ -23,7 +23,7 @@ diff -u -p -r1.1.2.3 feeds_atom.module
  function feeds_atom_ctools_plugin_api($owner, $api) {
    if ($owner == 'feeds' && $api == 'plugins') {
      return array('version' => 1);
-@@ -18,9 +9,57 @@ function feeds_atom_ctools_plugin_api($o
+   }
  }
  
  /**
@@ -83,7 +83,12 @@ diff -u -p -r1.1.2.3 feeds_atom.module
    $path = drupal_get_path('module', 'feeds_atom') .'/plugins';
  
    $info['FeedsAtomRDFParser'] = array(
-@@ -33,6 +72,17 @@ function feeds_atom_feeds_plugins() {
+     'name' => 'FeedsAtomRDF parser',
+     'description' => 'Parse data in Atom RDF format.',
+     'handler' => array(
+       'parent' => 'FeedsParser',
+       'class' => 'FeedsAtomRDFParser',
+       'file' => 'FeedsAtomRDFParser.inc',
        'path' => $path
      )
    );
@@ -101,7 +106,17 @@ diff -u -p -r1.1.2.3 feeds_atom.module
  
    $info['FeedsAtomRDFProcessor'] = array(
      'name' => 'FeedsAtomRDF Processing Stage',
-@@ -75,43 +125,27 @@ function taxonomy_feeds_atom_rdf_map_alt
+     'description' => 'Process my stuff.',
+     'help' => 'Processing stage of parsed data.',
+     'handler' => array(
+       'parent' => 'FeedsNodeProcessor',
+       'class' => 'FeedsAtomRDFProcessor',
+@@ -70,67 +120,52 @@ function taxonomy_feeds_atom_rdf_map_alt
+ 
+   // Zero out the taxonomy data that is already there, as it will break if we
+   // try to save the node with it there.
+   $target_item->taxonomy = array();
+ 
    // Process the term data.
    foreach ($source_item['rdf']['taxonomy'] as $source_term) {
      // Add new terms if they don't exist
@@ -164,7 +179,14 @@ diff -u -p -r1.1.2.3 feeds_atom.module
      }
  
      // Apply the term to the target node.
-@@ -126,6 +160,7 @@ function taxonomy_feeds_atom_rdf_map_alt
+     if (!empty($tid)) {
+       $term = taxonomy_get_term($tid, TRUE);
+       $target_item->taxonomy[$term->tid] = $term;
+     }
+   }
+ }
+ 
+ /**
   * Implementation of hook_feeds_atom_rdf_map_alter().
   */
  function filefield_feeds_atom_rdf_map_alter(&$target_item, $source_item, FeedsSource $source) {
@@ -172,7 +194,17 @@ diff -u -p -r1.1.2.3 feeds_atom.module
    // For any filefield in the incoming data, check to see if a full URL to the file
    // is specified.  If so, import it outright.
    foreach ($source_item['rdf'] as $field_name => $field) {
-@@ -161,6 +196,7 @@ function filefield_feeds_atom_rdf_map_al
+     $target_field = &$target_item->$field_name;
+     $field_info = content_fields($field_name, $target_item->type);
+     if (!empty($field['#attributes']['type']) && $field['#attributes']['type'] == 'filefield') {
+       foreach ($field as $i => $instance) {
+ 
+@@ -156,13 +191,14 @@ function filefield_feeds_atom_rdf_map_al
+     }
+   }
+ }
+ 
+ /**
   * Implementation of hook_file_delete().
   */
  function feeds_atom_file_delete($file) {
@@ -180,13 +212,15 @@ diff -u -p -r1.1.2.3 feeds_atom.module
    // Clean up our extra tracking information.
    db_query("DELETE FROM {feeds_atom_file_import} WHERE fid = %d", $file->fid);
  }
+ 
+ 
 Index: plugins/FeedsAtomRDFCustomParser.inc
 ===================================================================
 RCS file: plugins/FeedsAtomRDFCustomParser.inc
 diff -N plugins/FeedsAtomRDFCustomParser.inc
 --- /dev/null	1 Jan 1970 00:00:00 -0000
-+++ plugins/FeedsAtomRDFCustomParser.inc	3 Feb 2011 10:44:33 -0000
-@@ -0,0 +1,112 @@
++++ plugins/FeedsAtomRDFCustomParser.inc	8 Feb 2011 12:48:06 -0000
+@@ -0,0 +1,114 @@
 +<?php
 +
 +/**
@@ -270,7 +304,7 @@ diff -N plugins/FeedsAtomRDFCustomParser.inc
 +          }
 +      }
 +    }
-+    elseif (in_array($element_key, array('body', 'created', 'changed', 'uid'))) {
++    elseif (in_array($element_key, array('body', 'created', 'changed', 'uid', 'language', 'tguid'))) {
 +      if (in_array($element_key, array('created', 'changed'))) {
 +        return strtotime($item['rdf'][$element_key]);
 +      }
@@ -287,9 +321,11 @@ diff -N plugins/FeedsAtomRDFCustomParser.inc
 +      $tax_array = explode(':', $element_key);
 +      $vocabulary = $tax_array[1];
 +      $return_array = array();
-+      foreach ($item['rdf']['taxonomy'] as $tag) {
-+        if ($tag['vocabulary'] == $vocabulary) {
-+          $return_array[] = $tag['label'];
++      if (is_array($item['rdf']['taxonomy'])) {
++        foreach ($item['rdf']['taxonomy'] as $tag) {
++          if ($tag['vocabulary'] == $vocabulary) {
++            $return_array[] = $tag['label'];
++          }
 +        }
 +      }
 +      return $return_array;
