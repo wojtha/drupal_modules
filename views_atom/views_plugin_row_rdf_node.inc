@@ -66,6 +66,9 @@ class views_plugin_row_rdf_node extends views_plugin_row_rdf {
           $properties_xml->addChild($property, date('c', $value));
         }
         else {
+          if ($property == 'tnid') {
+            $properties_xml->addChild('tguid', views_atom_guid('node', $value, array('use_existing_from_feed' => TRUE)));
+          }
           $properties_xml->addChild($property, views_atom_sanitize($value));
         }
       }

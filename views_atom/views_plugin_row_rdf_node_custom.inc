@@ -89,6 +89,9 @@ class views_plugin_row_rdf_node_custom extends views_plugin_row_rdf {
         else {
           // Make sure the property is part of the view fields and not excluded from display
           if (in_array($property, $keys) && !$this->view->field[$property]->options['exclude']) {
+            if ($property == 'tnid') {
+              $properties_xml->addChild('tguid', views_atom_guid('node', $value, array('use_existing_from_feed' => TRUE)));
+            }
             $properties_xml->addChild($property, views_atom_sanitize($value));
           }
         }

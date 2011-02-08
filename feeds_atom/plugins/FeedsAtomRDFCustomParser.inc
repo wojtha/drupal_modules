@@ -81,7 +81,7 @@ class FeedsAtomRDFCustomParser extends FeedsParser {
           }
       }
     }
-    elseif (in_array($element_key, array('body', 'created', 'changed', 'uid'))) {
+    elseif (in_array($element_key, array('body', 'created', 'changed', 'uid', 'language', 'tguid'))) {
       if (in_array($element_key, array('created', 'changed'))) {
         return strtotime($item['rdf'][$element_key]);
       }
