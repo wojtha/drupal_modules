@@ -200,9 +200,8 @@ function content_views_atom_render($node, $entity_xml, $display = NULL) {
             }
           }
         }
+        module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
       }
-
-      module_invoke_all('views_atom_render_field', $field_xml, $field, $record->type);
     }
   }
 }
