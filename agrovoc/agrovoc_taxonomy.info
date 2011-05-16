@@ -1,8 +1,0 @@
-; $Id$
-name = Agrovoc Taxonomy
-description = Allows you to fill in a taxonomy using calls to the Agrovoc Web Service
-core = 6.x
-package = "Agrovoc"
-dependencies[] = agrovoc_api
-dependencies[] = taxonomy
-dependencies[] = i18ntaxonomy

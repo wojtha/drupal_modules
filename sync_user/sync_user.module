@@ -239,9 +239,8 @@ function sync_user_on_login($uid) {
   $openid = sync_user_openid($uid);
   if ($openid) {
     $sync_url = sync_user_subscription_url($openid);
-    $result = db_query("SELECT COUNT(*) AS number FROM {feeds_push_subscriptions} WHERE topic = '%s'", $sync_url);
-    $row = $result->fetch_object();
-    if ($row->number == 0) {
+    $number = db_result(db_query("SELECT COUNT(*) AS number FROM {feeds_push_subscriptions} WHERE topic = '%s'", $sync_url));
+    if (empty($number)) {
       sync_user_subscribe($uid, sync_user_subscription_url($openid));
     }
   }
