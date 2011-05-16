@@ -17,11 +17,12 @@ function push_hub_pusher_install() {
   // If feeds deletes the guid before push_hub_pusher notifies the subscriber, 
   // push_hub_pusher won't be able to know the node's guid and the subscriber won't be able to know
   // which node is being deleted
-  $weight = db_result(db_query("SELECT weight FROM {system} WHERE name = 'feeds'"));
+  // Commenting this out as it seems to cause another bug
+  /*$weight = db_result(db_query("SELECT weight FROM {system} WHERE name = 'feeds'"));
   if (!$weight) {
     $weight = 0;
   }
-  db_query("UPDATE {system} SET weight = %d WHERE name = 'push_hub_pusher'", $weight - 1);
+  db_query("UPDATE {system} SET weight = %d WHERE name = 'push_hub_pusher'", $weight - 1);*/
   db_query("DELETE FROM {cache}");
 }
 
